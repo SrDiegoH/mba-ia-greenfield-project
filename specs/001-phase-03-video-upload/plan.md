@@ -85,15 +85,14 @@ nestjs-project/
 │   │   ├── videos.constants.ts           # NOVO: VIDEO_QUEUE_NAME, VideoStatus enum, etc.
 │   │   ├── dto/
 │   │   │   ├── initiate-upload.dto.ts    # NOVO: title, fileSize, mimeType
-│   │   │   ├── update-video.dto.ts       # NOVO: title (opcional)
+│   │   │   ├── update-video.dto.ts       # NOVO: title (obrigatório)
 │   │   │   └── list-videos-query.dto.ts  # NOVO: page, limit
 │   │   ├── entities/
-│   │   │   └── video.entity.ts           # NOVO
+│   │   │   ├── video.entity.ts                     # NOVO
+│   │   │   └── video.entity.integration-spec.ts    # NOVO
 │   │   ├── videos.controller.spec.ts     # NOVO
 │   │   ├── videos.service.spec.ts        # NOVO
-│   │   ├── videos.service.integration-spec.ts  # NOVO
-│   │   └── entities/
-│   │       └── video.entity.integration-spec.ts  # NOVO
+│   │   └── videos.service.integration-spec.ts  # NOVO
 │   ├── storage/
 │   │   ├── storage.module.ts             # NOVO: módulo global para cliente S3
 │   │   └── storage.service.ts            # NOVO: presigned URLs, put, get, delete

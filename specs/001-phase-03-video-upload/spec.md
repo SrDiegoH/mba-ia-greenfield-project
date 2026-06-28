@@ -65,7 +65,7 @@ Um usuário (autenticado ou anônimo) assiste a um vídeo sem precisar aguardar 
 
 ### User Story 4 — Download do vídeo (Priority: P4)
 
-Um usuário **autenticado** pode baixar o arquivo de vídeo completo. O sistema fornece o arquivo ou um mecanismo para obtê-lo de forma direta, sem exigir que o conteúdo passe pela API.
+Um usuário **autenticado** pode baixar o arquivo de vídeo completo. O sistema fornece o arquivo ou um mecanismo para obtê-lo de forma direta, sem exigir que o conteúdo passe pela API. O mecanismo de entrega é um proxy através da API (não um redirect para URL pré-assinada), preservando as credenciais de acesso ao storage no lado do servidor.
 
 **Why this priority**: Download é uma funcionalidade complementar ao streaming, importante para uso offline, mas não bloqueia a entrega de valor principal.
 
