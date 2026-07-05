@@ -1,0 +1,15 @@
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { BullModule } from '@nestjs/bullmq';
+import { Video } from '../videos/entities/video.entity';
+import { VideoProcessingProcessor } from './video-processing.processor';
+import { VIDEO_QUEUE_NAME } from '../videos/videos.constants';
+
+@Module({
+  imports: [
+    TypeOrmModule.forFeature([Video]),
+    BullModule.registerQueue({ name: VIDEO_QUEUE_NAME }),
+  ],
+  providers: [VideoProcessingProcessor],
+})
+export class VideoProcessingModule {}

@@ -1,47 +1,33 @@
+import { NestFactory } from '@nestjs/core';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigType } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bullmq';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
-import { AuthModule } from './auth/auth.module';
-import { StorageModule } from './storage/storage.module';
-import { VideosModule } from './videos/videos.module';
-import appConfig from './config/app.config';
-import authConfig from './config/auth.config';
 import databaseConfig from './config/database.config';
-import mailConfig from './config/mail.config';
 import storageConfig from './config/storage.config';
 import queueConfig from './config/queue.config';
-import swaggerConfig from './config/swagger.config';
 import { envValidationSchema } from './config/env.validation';
+import { StorageModule } from './storage/storage.module';
+import { VideoProcessingModule } from './video-processing/video-processing.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [
-        appConfig,
-        authConfig,
-        databaseConfig,
-        mailConfig,
-        swaggerConfig,
-        storageConfig,
-        queueConfig,
-      ],
+      load: [databaseConfig, storageConfig, queueConfig],
       validationSchema: envValidationSchema,
       validationOptions: { allowUnknown: true, abortEarly: false },
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [databaseConfig.KEY],
-      useFactory: (dbConfig: ConfigType<typeof databaseConfig>) => ({
+      useFactory: (dbCfg: ConfigType<typeof databaseConfig>) => ({
         type: 'postgres',
-        host: dbConfig.host,
-        port: dbConfig.port,
-        username: dbConfig.username,
-        password: dbConfig.password,
-        database: dbConfig.name,
+        host: dbCfg.host,
+        port: dbCfg.port,
+        username: dbCfg.username,
+        password: dbCfg.password,
+        database: dbCfg.name,
         autoLoadEntities: true,
         synchronize: false,
       }),
@@ -53,11 +39,17 @@ import { envValidationSchema } from './config/env.validation';
         connection: { host: cfg.host, port: cfg.port, password: cfg.password },
       }),
     }),
-    AuthModule,
     StorageModule,
-    VideosModule,
+    VideoProcessingModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
 })
-export class AppModule {}
+class WorkerAppModule {}
+
+async function bootstrap(): Promise<void> {
+  const app = await NestFactory.createApplicationContext(WorkerAppModule, {
+    logger: ['log', 'error', 'warn'],
+  });
+  app.enableShutdownHooks();
+}
+
+bootstrap();

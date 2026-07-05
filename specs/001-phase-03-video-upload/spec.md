@@ -69,11 +69,11 @@ Um usuário **autenticado** pode baixar o arquivo de vídeo completo. O sistema 
 
 **Why this priority**: Download é uma funcionalidade complementar ao streaming, importante para uso offline, mas não bloqueia a entrega de valor principal.
 
-**Independent Test**: Pode ser testado requisitando o download de um vídeo com status `ready` com um token de autenticação válido e verificando que o arquivo completo é retornado ou que uma URL de download temporária é fornecida.
+**Independent Test**: Pode ser testado requisitando o download de um vídeo com status `ready` com um token de autenticação válido e verificando que o arquivo completo é retornado com cabeçalho `Content-Disposition: attachment`.
 
 **Acceptance Scenarios**:
 
-1. **Given** um usuário autenticado e um vídeo com status `ready`, **When** o usuário solicita o download, **Then** o sistema entrega o arquivo completo ou retorna uma URL temporária de acesso direto ao storage.
+1. **Given** um usuário autenticado e um vídeo com status `ready`, **When** o usuário solicita o download, **Then** o sistema entrega o arquivo completo diretamente com cabeçalho `Content-Disposition: attachment` — o conteúdo binário é servido como proxy pela API, sem expor as credenciais ou URLs internas do storage ao cliente.
 2. **Given** um usuário não autenticado e um vídeo com status `ready`, **When** o usuário tenta fazer o download, **Then** o sistema retorna erro de autorização sem entregar o arquivo.
 3. **Given** um usuário autenticado e um vídeo com status diferente de `ready`, **When** o usuário solicita o download, **Then** o sistema retorna erro indicando que o vídeo não está disponível para download.
 
@@ -81,7 +81,7 @@ Um usuário **autenticado** pode baixar o arquivo de vídeo completo. O sistema 
 
 ### User Story 5 — URL única por vídeo (Priority: P2)
 
-Cada vídeo recebe um identificador único na URL que não conflita com outros vídeos, mesmo que tenham títulos idênticos. Esse identificador é atribuído no momento do pré-cadastro e nunca muda.
+Cada vídeo recebe um identificador único na URL que não conflita com outros vídeos, mesmo que tenham títulos idênticos. Esse identificador é atribuído no momento do pré-cadastro e nunca muda. *(Requisito formalizado em FR-003; implementado como parte de US1 — o UUID v4 como chave primária garante unicidade sem campo slug separado.)*
 
 **Why this priority**: URLs únicas são requisito de segurança e usabilidade; sem elas não é possível compartilhar ou referenciar vídeos de forma confiável.
 
@@ -144,21 +144,21 @@ Um criador autenticado pode listar todos os vídeos do seu canal, visualizar os 
 ### Functional Requirements
 
 - **FR-001**: O sistema DEVE permitir que usuários autenticados iniciem o upload de arquivos de vídeo de até 10 GB sem transmitir o conteúdo binário pela API; o sistema DEVE validar que o arquivo declarado é do tipo vídeo antes de pré-registrar o rascunho, rejeitando outros tipos de mídia.
-- **FR-002**: O sistema DEVE pré-registrar o vídeo como rascunho (`draft`) no momento do início do upload, antes do arquivo ser enviado ao storage.
+- **FR-002**: O sistema DEVE pré-registrar o vídeo como rascunho (`draft`) no momento do início do upload, antes do arquivo ser enviado ao storage. Neste mesmo pré-registro, o sistema DEVE determinar e persistir a chave de localização do arquivo no storage (`storage_key`) — essa chave é usada para gerar a URL de upload pré-assinada e nunca é nula após a criação do registro.
 - **FR-003**: O sistema DEVE atribuir um identificador único a cada vídeo no momento do pré-cadastro, garantindo ausência de conflitos entre vídeos com títulos iguais.
 - **FR-004**: O sistema DEVE expor um endpoint dedicado para que o cliente sinalize que o envio do arquivo ao storage foi concluído; ao receber essa confirmação, o sistema DEVE enfileirar automaticamente uma tarefa de processamento para o vídeo correspondente.
-- **FR-005**: O worker DEVE extrair duração e metadados técnicos do arquivo de vídeo e persistir essas informações no registro do vídeo.
+- **FR-005**: O worker DEVE extrair duração e metadados técnicos do arquivo de vídeo e persistir essas informações no registro do vídeo. Os metadados técnicos mínimos a persistir são: largura e altura em pixels (resolução), codec de vídeo e taxa de bits em kbps.
 - **FR-006**: O worker DEVE gerar uma thumbnail a partir de um frame representativo do vídeo e armazená-la no object storage.
 - **FR-007**: O sistema DEVE atualizar o status do vídeo em cada transição do ciclo (`draft` → `processing` → `ready` | `error`).
-- **FR-008**: O worker DEVE tentar o processamento até 3 vezes com intervalo fixo entre tentativas; somente após esgotar as tentativas o status do vídeo DEVE mudar para `error`, com a causa da última falha registrada no registro do vídeo.
+- **FR-008**: O worker DEVE tentar o processamento até 3 vezes com intervalo fixo de 5 segundos entre tentativas; somente após esgotar as tentativas o status do vídeo DEVE mudar para `error`, com a causa da última falha registrada no registro do vídeo (truncada em 2048 caracteres).
 - **FR-009**: O sistema DEVE suportar reprodução via streaming para qualquer usuário (autenticado ou anônimo), com respostas parciais quando o cliente solicitar um intervalo de bytes, para vídeos com status `ready`.
 - **FR-010**: O sistema DEVE permitir o download do arquivo de vídeo completo para vídeos com status `ready`, restrito a usuários autenticados.
 - **FR-011**: Cada vídeo DEVE pertencer a exatamente um canal; o canal é determinado pelo usuário autenticado no momento do pré-cadastro.
 - **FR-012**: O object storage, a fila de processamento e o worker DEVEM ser provisionados como serviços gerenciados pela orquestração de containers do backend, subindo junto com a stack existente sem passos manuais adicionais.
 - **FR-013**: A tabela de vídeos DEVE ser criada via migration versionada; nenhum schema é criado por sincronização automática do mecanismo de persistência.
-- **FR-014**: O sistema DEVE permitir que o criador autenticado liste os vídeos do seu próprio canal de forma paginada, retornando identificador, título, status e data de criação de cada item, além de metadados de paginação (total de itens, página atual e indicador de próxima página); a ordenação padrão é por data de criação decrescente (mais recentes primeiro); o tamanho de página padrão é definido no planejamento.
+- **FR-014**: O sistema DEVE permitir que o criador autenticado liste os vídeos do seu próprio canal de forma paginada, retornando identificador, título, status e data de criação de cada item, além de metadados de paginação (total de itens, página atual e indicador de próxima página); a ordenação padrão é por data de criação decrescente (mais recentes primeiro); o tamanho de página padrão é 20 itens; o tamanho máximo configurável é 100 itens por página.
 - **FR-015**: O sistema DEVE permitir que o criador autenticado atualize o título de um vídeo do seu canal em qualquer status; o identificador único da URL não deve ser alterado pela edição.
-- **FR-016**: O sistema DEVE permitir que o criador autenticado exclua um vídeo do seu canal em qualquer status; a exclusão DEVE remover o registro do banco e os arquivos correspondentes (vídeo e thumbnail) do armazenamento, além de cancelar qualquer tarefa de processamento pendente na fila.
+- **FR-016**: O sistema DEVE permitir que o criador autenticado exclua um vídeo do seu canal em qualquer status; a exclusão DEVE remover o registro do banco e os arquivos correspondentes (vídeo e thumbnail) do armazenamento, além de cancelar qualquer tarefa de processamento pendente na fila (best-effort: aplica-se a jobs ainda enfileirados; jobs em execução ativa pelo worker não são interrompidos — o worker descartará o job ao não encontrar o registro do vídeo).
 - **FR-017**: O sistema DEVE impedir que um usuário autenticado edite ou exclua vídeos pertencentes a canais de outros usuários, retornando erro de autorização.
 - **FR-018**: O sistema DEVE expor um endpoint público de detalhe de vídeo, acessível por qualquer usuário (autenticado ou anônimo), que retorne título, status, referência à thumbnail, duração e demais metadados disponíveis para o vídeo identificado pelo seu identificador único de URL.
 
@@ -172,7 +172,7 @@ Um criador autenticado pode listar todos os vídeos do seu canal, visualizar os 
 
 ### Measurable Outcomes
 
-- **SC-001**: Arquivos de até 10 GB são enviados com sucesso sem causar timeout ou indisponibilidade na API para outras requisições simultâneas.
+- **SC-001**: Arquivos de até 10 GB são enviados com sucesso sem causar timeout ou indisponibilidade na API para outras requisições simultâneas. Validação por design arquitetural: os bytes do arquivo não transitam pela API (upload direto ao storage via URL pré-assinada), dispensando teste de carga adicional para verificar este critério.
 - **SC-002**: O processamento automático (extração de metadados + geração de thumbnail) é concluído sem intervenção manual do usuário após o upload.
 - **SC-003**: O status do vídeo reflete corretamente cada etapa do ciclo de vida em tempo real, sem estados inconsistentes.
 - **SC-004**: Todos os vídeos com status `ready` são acessíveis via streaming com suporte a requisições de intervalo (range), permitindo navegação no conteúdo sem download completo.
