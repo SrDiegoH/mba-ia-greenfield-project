@@ -17,7 +17,11 @@ import {
 import { Channel } from '../channels/entities/channel.entity';
 import storageConfig from '../config/storage.config';
 import { Video } from './entities/video.entity';
-import { VideoStatus, VIDEO_QUEUE_NAME, type VideoProcessingJob } from './videos.constants';
+import {
+  VideoStatus,
+  VIDEO_QUEUE_NAME,
+  type VideoProcessingJob,
+} from './videos.constants';
 import { InitiateUploadDto } from './dto/initiate-upload.dto';
 import { UpdateVideoDto } from './dto/update-video.dto';
 import { ListVideosQueryDto } from './dto/list-videos-query.dto';
@@ -100,7 +104,12 @@ export class VideosService {
     });
     await this.videoRepository.save(video);
 
-    return { id: videoId, status: VideoStatus.DRAFT, upload_url: uploadUrl, storage_key: storageKey };
+    return {
+      id: videoId,
+      status: VideoStatus.DRAFT,
+      upload_url: uploadUrl,
+      storage_key: storageKey,
+    };
   }
 
   async confirmUpload(
@@ -153,7 +162,10 @@ export class VideosService {
     return this.toPublicView(video);
   }
 
-  async streamVideo(videoId: string, rangeHeader?: string): Promise<StreamResult> {
+  async streamVideo(
+    videoId: string,
+    rangeHeader?: string,
+  ): Promise<StreamResult> {
     const video = await this.videoRepository.findOne({
       where: { id: videoId },
     });
@@ -164,7 +176,10 @@ export class VideosService {
       throw new VideoNotReadyException();
     }
 
-    const result = await this.storageService.getObject(video.storage_key, rangeHeader);
+    const result = await this.storageService.getObject(
+      video.storage_key,
+      rangeHeader,
+    );
     return {
       stream: result.stream,
       contentType: result.contentType,
@@ -207,7 +222,12 @@ export class VideosService {
     videoId: string,
     userId: string,
     dto: UpdateVideoDto,
-  ): Promise<{ id: string; title: string; status: VideoStatus; updated_at: Date }> {
+  ): Promise<{
+    id: string;
+    title: string;
+    status: VideoStatus;
+    updated_at: Date;
+  }> {
     const video = await this.videoRepository.findOne({
       where: { id: videoId },
       relations: ['channel'],
@@ -221,7 +241,12 @@ export class VideosService {
 
     video.title = dto.title;
     const saved = await this.videoRepository.save(video);
-    return { id: saved.id, title: saved.title, status: saved.status, updated_at: saved.updated_at };
+    return {
+      id: saved.id,
+      title: saved.title,
+      status: saved.status,
+      updated_at: saved.updated_at,
+    };
   }
 
   async deleteVideo(videoId: string, userId: string): Promise<void> {
@@ -281,10 +306,9 @@ export class VideosService {
   }
 
   private toPublicView(video: Video): VideoPublicView {
-    const thumbnailUrl =
-      video.thumbnail_key
-        ? `${this.storageCfg.endpoint}/${this.storageCfg.bucket}/${video.thumbnail_key}`
-        : null;
+    const thumbnailUrl = video.thumbnail_key
+      ? `${this.storageCfg.endpoint}/${this.storageCfg.bucket}/${video.thumbnail_key}`
+      : null;
 
     return {
       id: video.id,

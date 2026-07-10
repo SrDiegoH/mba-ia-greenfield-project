@@ -17,10 +17,17 @@ import {
 } from '../common/exceptions/domain.exception';
 import storageConfig from '../config/storage.config';
 
-const mockStorageCfg = { endpoint: 'http://minio:9000', bucket: 'streamtube', accessKey: 'x', secretKey: 'x' };
+const mockStorageCfg = {
+  endpoint: 'http://minio:9000',
+  bucket: 'streamtube',
+  accessKey: 'x',
+  secretKey: 'x',
+};
 
 const mockStorageService = {
-  generatePresignedPutUrl: jest.fn().mockResolvedValue('https://minio/presigned-url'),
+  generatePresignedPutUrl: jest
+    .fn()
+    .mockResolvedValue('https://minio/presigned-url'),
   getObject: jest.fn(),
   putObject: jest.fn(),
   deleteObject: jest.fn(),
@@ -33,7 +40,17 @@ const mockQueue = {
 };
 
 function makeChannel(overrides: Partial<Channel> = {}): Channel {
-  return { id: 'channel-uuid', user_id: 'user-uuid', name: 'Test', nickname: 'test', description: null, created_at: new Date(), updated_at: new Date(), user: null as any, ...overrides } as Channel;
+  return {
+    id: 'channel-uuid',
+    user_id: 'user-uuid',
+    name: 'Test',
+    nickname: 'test',
+    description: null,
+    created_at: new Date(),
+    updated_at: new Date(),
+    user: null as any,
+    ...overrides,
+  };
 }
 
 function makeVideo(overrides: Partial<Video> = {}): Video {
@@ -51,7 +68,7 @@ function makeVideo(overrides: Partial<Video> = {}): Video {
     updated_at: new Date(),
     channel: makeChannel(),
     ...overrides,
-  } as Video;
+  };
 }
 
 describe('VideosService', () => {
@@ -65,8 +82,21 @@ describe('VideosService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         VideosService,
-        { provide: getRepositoryToken(Video), useValue: { findOne: jest.fn(), create: jest.fn(), save: jest.fn(), findAndCount: jest.fn(), remove: jest.fn(), update: jest.fn() } },
-        { provide: getRepositoryToken(Channel), useValue: { findOne: jest.fn() } },
+        {
+          provide: getRepositoryToken(Video),
+          useValue: {
+            findOne: jest.fn(),
+            create: jest.fn(),
+            save: jest.fn(),
+            findAndCount: jest.fn(),
+            remove: jest.fn(),
+            update: jest.fn(),
+          },
+        },
+        {
+          provide: getRepositoryToken(Channel),
+          useValue: { findOne: jest.fn() },
+        },
         { provide: getQueueToken(VIDEO_QUEUE_NAME), useValue: mockQueue },
         { provide: StorageService, useValue: mockStorageService },
         { provide: storageConfig.KEY, useValue: mockStorageCfg },
@@ -116,7 +146,11 @@ describe('VideosService', () => {
       channelRepo.findOne = jest.fn().mockResolvedValue(null);
 
       await expect(
-        service.initiateUpload('user-uuid', { title: 'My Video', file_size: 1024, mime_type: 'video/mp4' }),
+        service.initiateUpload('user-uuid', {
+          title: 'My Video',
+          file_size: 1024,
+          mime_type: 'video/mp4',
+        }),
       ).rejects.toThrow(ChannelRequiredException);
     });
   });
@@ -127,32 +161,46 @@ describe('VideosService', () => {
     it('should transition draft to processing and enqueue job', async () => {
       const video = makeVideo({ status: VideoStatus.DRAFT });
       videoRepo.findOne = jest.fn().mockResolvedValue(video);
-      videoRepo.save = jest.fn().mockResolvedValue({ ...video, status: VideoStatus.PROCESSING });
+      videoRepo.save = jest
+        .fn()
+        .mockResolvedValue({ ...video, status: VideoStatus.PROCESSING });
 
       const result = await service.confirmUpload('video-uuid', 'user-uuid');
 
-      expect(mockQueue.add).toHaveBeenCalledWith(VIDEO_QUEUE_NAME, expect.objectContaining({ videoId: 'video-uuid' }), expect.objectContaining({ jobId: 'video-uuid', attempts: 3 }));
+      expect(mockQueue.add).toHaveBeenCalledWith(
+        VIDEO_QUEUE_NAME,
+        expect.objectContaining({ videoId: 'video-uuid' }),
+        expect.objectContaining({ jobId: 'video-uuid', attempts: 3 }),
+      );
       expect(result.status).toBe(VideoStatus.PROCESSING);
     });
 
     it('should throw VideoNotFoundException when video does not exist', async () => {
       videoRepo.findOne = jest.fn().mockResolvedValue(null);
 
-      await expect(service.confirmUpload('missing', 'user-uuid')).rejects.toThrow(VideoNotFoundException);
+      await expect(
+        service.confirmUpload('missing', 'user-uuid'),
+      ).rejects.toThrow(VideoNotFoundException);
     });
 
     it('should throw VideoOwnershipException when user is not owner', async () => {
-      const video = makeVideo({ channel: makeChannel({ user_id: 'other-user' }) });
+      const video = makeVideo({
+        channel: makeChannel({ user_id: 'other-user' }),
+      });
       videoRepo.findOne = jest.fn().mockResolvedValue(video);
 
-      await expect(service.confirmUpload('video-uuid', 'user-uuid')).rejects.toThrow(VideoOwnershipException);
+      await expect(
+        service.confirmUpload('video-uuid', 'user-uuid'),
+      ).rejects.toThrow(VideoOwnershipException);
     });
 
     it('should throw VideoNotDraftException when video is not draft', async () => {
       const video = makeVideo({ status: VideoStatus.PROCESSING });
       videoRepo.findOne = jest.fn().mockResolvedValue(video);
 
-      await expect(service.confirmUpload('video-uuid', 'user-uuid')).rejects.toThrow(VideoNotDraftException);
+      await expect(
+        service.confirmUpload('video-uuid', 'user-uuid'),
+      ).rejects.toThrow(VideoNotDraftException);
     });
 
     it('should throw VideoUploadEnqueueException and keep draft status when queue fails', async () => {
@@ -160,7 +208,9 @@ describe('VideosService', () => {
       videoRepo.findOne = jest.fn().mockResolvedValue(video);
       mockQueue.add.mockRejectedValueOnce(new Error('Redis down'));
 
-      await expect(service.confirmUpload('video-uuid', 'user-uuid')).rejects.toThrow(VideoUploadEnqueueException);
+      await expect(
+        service.confirmUpload('video-uuid', 'user-uuid'),
+      ).rejects.toThrow(VideoUploadEnqueueException);
       expect(videoRepo.save).not.toHaveBeenCalled();
     });
   });
@@ -178,15 +228,23 @@ describe('VideosService', () => {
     });
 
     it('should build thumbnail_url when thumbnail_key is set', async () => {
-      videoRepo.findOne = jest.fn().mockResolvedValue(makeVideo({ thumbnail_key: 'videos/v/thumbnail.jpg' }));
+      videoRepo.findOne = jest
+        .fn()
+        .mockResolvedValue(
+          makeVideo({ thumbnail_key: 'videos/v/thumbnail.jpg' }),
+        );
 
       const result = await service.findById('video-uuid');
 
-      expect(result.thumbnail_url).toBe('http://minio:9000/streamtube/videos/v/thumbnail.jpg');
+      expect(result.thumbnail_url).toBe(
+        'http://minio:9000/streamtube/videos/v/thumbnail.jpg',
+      );
     });
 
     it('should return null thumbnail_url when thumbnail_key is null', async () => {
-      videoRepo.findOne = jest.fn().mockResolvedValue(makeVideo({ thumbnail_key: null }));
+      videoRepo.findOne = jest
+        .fn()
+        .mockResolvedValue(makeVideo({ thumbnail_key: null }));
 
       const result = await service.findById('video-uuid');
 
@@ -196,7 +254,9 @@ describe('VideosService', () => {
     it('should throw VideoNotFoundException for unknown id', async () => {
       videoRepo.findOne = jest.fn().mockResolvedValue(null);
 
-      await expect(service.findById('missing')).rejects.toThrow(VideoNotFoundException);
+      await expect(service.findById('missing')).rejects.toThrow(
+        VideoNotFoundException,
+      );
     });
   });
 
@@ -204,8 +264,14 @@ describe('VideosService', () => {
 
   describe('streamVideo', () => {
     it('should return stream for ready video', async () => {
-      videoRepo.findOne = jest.fn().mockResolvedValue(makeVideo({ status: VideoStatus.READY }));
-      mockStorageService.getObject.mockResolvedValue({ stream: {}, contentType: 'video/mp4', contentLength: 1024 });
+      videoRepo.findOne = jest
+        .fn()
+        .mockResolvedValue(makeVideo({ status: VideoStatus.READY }));
+      mockStorageService.getObject.mockResolvedValue({
+        stream: {},
+        contentType: 'video/mp4',
+        contentLength: 1024,
+      });
 
       const result = await service.streamVideo('video-uuid');
 
@@ -213,8 +279,15 @@ describe('VideosService', () => {
     });
 
     it('should return 206 statusCode for range request', async () => {
-      videoRepo.findOne = jest.fn().mockResolvedValue(makeVideo({ status: VideoStatus.READY }));
-      mockStorageService.getObject.mockResolvedValue({ stream: {}, contentType: 'video/mp4', contentLength: 512, contentRange: 'bytes 0-511/1024' });
+      videoRepo.findOne = jest
+        .fn()
+        .mockResolvedValue(makeVideo({ status: VideoStatus.READY }));
+      mockStorageService.getObject.mockResolvedValue({
+        stream: {},
+        contentType: 'video/mp4',
+        contentLength: 512,
+        contentRange: 'bytes 0-511/1024',
+      });
 
       const result = await service.streamVideo('video-uuid', 'bytes=0-511');
 
@@ -223,9 +296,13 @@ describe('VideosService', () => {
     });
 
     it('should throw VideoNotReadyException for draft video', async () => {
-      videoRepo.findOne = jest.fn().mockResolvedValue(makeVideo({ status: VideoStatus.DRAFT }));
+      videoRepo.findOne = jest
+        .fn()
+        .mockResolvedValue(makeVideo({ status: VideoStatus.DRAFT }));
 
-      await expect(service.streamVideo('video-uuid')).rejects.toThrow(VideoNotReadyException);
+      await expect(service.streamVideo('video-uuid')).rejects.toThrow(
+        VideoNotReadyException,
+      );
     });
   });
 
@@ -234,9 +311,15 @@ describe('VideosService', () => {
   describe('listChannelVideos', () => {
     it('should return paginated videos in descending order', async () => {
       channelRepo.findOne = jest.fn().mockResolvedValue(makeChannel());
-      videoRepo.findAndCount = jest.fn().mockResolvedValue([[makeVideo(), makeVideo()], 2]);
+      videoRepo.findAndCount = jest
+        .fn()
+        .mockResolvedValue([[makeVideo(), makeVideo()], 2]);
 
-      const result = await service.listChannelVideos('channel-uuid', 'user-uuid', { page: 1, limit: 20 });
+      const result = await service.listChannelVideos(
+        'channel-uuid',
+        'user-uuid',
+        { page: 1, limit: 20 },
+      );
 
       expect(result.items).toHaveLength(2);
       expect(result.total).toBe(2);
@@ -247,15 +330,26 @@ describe('VideosService', () => {
       channelRepo.findOne = jest.fn().mockResolvedValue(makeChannel());
       videoRepo.findAndCount = jest.fn().mockResolvedValue([[makeVideo()], 25]);
 
-      const result = await service.listChannelVideos('channel-uuid', 'user-uuid', { page: 1, limit: 20 });
+      const result = await service.listChannelVideos(
+        'channel-uuid',
+        'user-uuid',
+        { page: 1, limit: 20 },
+      );
 
       expect(result.has_next_page).toBe(true);
     });
 
     it('should throw VideoOwnershipException for wrong user', async () => {
-      channelRepo.findOne = jest.fn().mockResolvedValue(makeChannel({ user_id: 'other' }));
+      channelRepo.findOne = jest
+        .fn()
+        .mockResolvedValue(makeChannel({ user_id: 'other' }));
 
-      await expect(service.listChannelVideos('channel-uuid', 'user-uuid', { page: 1, limit: 20 })).rejects.toThrow(VideoOwnershipException);
+      await expect(
+        service.listChannelVideos('channel-uuid', 'user-uuid', {
+          page: 1,
+          limit: 20,
+        }),
+      ).rejects.toThrow(VideoOwnershipException);
     });
   });
 
@@ -265,18 +359,28 @@ describe('VideosService', () => {
     it('should update title and keep id unchanged', async () => {
       const video = makeVideo();
       videoRepo.findOne = jest.fn().mockResolvedValue(video);
-      videoRepo.save = jest.fn().mockResolvedValue({ ...video, title: 'New Title' });
+      videoRepo.save = jest
+        .fn()
+        .mockResolvedValue({ ...video, title: 'New Title' });
 
-      const result = await service.updateTitle('video-uuid', 'user-uuid', { title: 'New Title' });
+      const result = await service.updateTitle('video-uuid', 'user-uuid', {
+        title: 'New Title',
+      });
 
       expect(result.id).toBe('video-uuid');
       expect(result.title).toBe('New Title');
     });
 
     it('should throw VideoOwnershipException for wrong user', async () => {
-      videoRepo.findOne = jest.fn().mockResolvedValue(makeVideo({ channel: makeChannel({ user_id: 'other' }) }));
+      videoRepo.findOne = jest
+        .fn()
+        .mockResolvedValue(
+          makeVideo({ channel: makeChannel({ user_id: 'other' }) }),
+        );
 
-      await expect(service.updateTitle('video-uuid', 'user-uuid', { title: 'x' })).rejects.toThrow(VideoOwnershipException);
+      await expect(
+        service.updateTitle('video-uuid', 'user-uuid', { title: 'x' }),
+      ).rejects.toThrow(VideoOwnershipException);
     });
   });
 
@@ -292,8 +396,12 @@ describe('VideosService', () => {
 
       await service.deleteVideo('video-uuid', 'user-uuid');
 
-      expect(mockStorageService.deleteObject).toHaveBeenCalledWith(video.storage_key);
-      expect(mockStorageService.deleteObject).toHaveBeenCalledWith(video.thumbnail_key);
+      expect(mockStorageService.deleteObject).toHaveBeenCalledWith(
+        video.storage_key,
+      );
+      expect(mockStorageService.deleteObject).toHaveBeenCalledWith(
+        video.thumbnail_key,
+      );
       expect(mockJob.remove).toHaveBeenCalled();
       expect(videoRepo.remove).toHaveBeenCalled();
     });
@@ -314,8 +422,16 @@ describe('VideosService', () => {
 
   describe('downloadVideo', () => {
     it('should return stream with filename for ready video', async () => {
-      videoRepo.findOne = jest.fn().mockResolvedValue(makeVideo({ status: VideoStatus.READY, title: 'My Video' }));
-      mockStorageService.getObject.mockResolvedValue({ stream: {}, contentType: 'video/mp4', contentLength: 2048 });
+      videoRepo.findOne = jest
+        .fn()
+        .mockResolvedValue(
+          makeVideo({ status: VideoStatus.READY, title: 'My Video' }),
+        );
+      mockStorageService.getObject.mockResolvedValue({
+        stream: {},
+        contentType: 'video/mp4',
+        contentLength: 2048,
+      });
 
       const result = await service.downloadVideo('video-uuid');
 
@@ -323,15 +439,21 @@ describe('VideosService', () => {
     });
 
     it('should throw VideoNotReadyException for processing video', async () => {
-      videoRepo.findOne = jest.fn().mockResolvedValue(makeVideo({ status: VideoStatus.PROCESSING }));
+      videoRepo.findOne = jest
+        .fn()
+        .mockResolvedValue(makeVideo({ status: VideoStatus.PROCESSING }));
 
-      await expect(service.downloadVideo('video-uuid')).rejects.toThrow(VideoNotReadyException);
+      await expect(service.downloadVideo('video-uuid')).rejects.toThrow(
+        VideoNotReadyException,
+      );
     });
 
     it('should throw VideoNotFoundException for unknown id', async () => {
       videoRepo.findOne = jest.fn().mockResolvedValue(null);
 
-      await expect(service.downloadVideo('missing')).rejects.toThrow(VideoNotFoundException);
+      await expect(service.downloadVideo('missing')).rejects.toThrow(
+        VideoNotFoundException,
+      );
     });
   });
 });

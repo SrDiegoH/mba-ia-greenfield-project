@@ -52,4 +52,4 @@ async function bootstrap(): Promise<void> {
   app.enableShutdownHooks();
 }
 
-bootstrap();
+void bootstrap();

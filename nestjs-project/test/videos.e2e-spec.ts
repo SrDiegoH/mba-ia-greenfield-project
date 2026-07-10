@@ -15,11 +15,15 @@ import { VideoStatus } from '../src/videos/videos.constants';
 import { cleanAllTables } from '../src/test/create-test-data-source';
 
 const mockStorage = {
-  generatePresignedPutUrl: jest.fn().mockResolvedValue('http://minio:9000/streamtube/videos/test/original.mp4?X-Amz-Signature=fake'),
+  generatePresignedPutUrl: jest
+    .fn()
+    .mockResolvedValue(
+      'http://minio:9000/streamtube/videos/test/original.mp4?X-Amz-Signature=fake',
+    ),
   getObject: jest.fn().mockResolvedValue({
     stream: Readable.from(['fake video data']),
     contentType: 'video/mp4',
-    contentLength: 14,
+    contentLength: 15,
     contentRange: undefined,
   }),
   putObject: jest.fn().mockResolvedValue(undefined),
@@ -56,7 +60,8 @@ describe('Videos (e2e)', () => {
     await app.init();
 
     dataSource = moduleFixture.get(DataSource);
-    throttlerStorage = moduleFixture.get<ThrottlerStorageService>(ThrottlerStorage);
+    throttlerStorage =
+      moduleFixture.get<ThrottlerStorageService>(ThrottlerStorage);
   });
 
   afterAll(async () => {
@@ -67,24 +72,34 @@ describe('Videos (e2e)', () => {
     await cleanAllTables(dataSource);
     throttlerStorage.storage.clear();
     jest.clearAllMocks();
-    mockStorage.generatePresignedPutUrl.mockResolvedValue('http://minio:9000/streamtube/videos/test/original.mp4?X-Amz-Signature=fake');
+    mockStorage.generatePresignedPutUrl.mockResolvedValue(
+      'http://minio:9000/streamtube/videos/test/original.mp4?X-Amz-Signature=fake',
+    );
     mockStorage.getObject.mockResolvedValue({
       stream: Readable.from(['fake video data']),
       contentType: 'video/mp4',
-      contentLength: 14,
+      contentLength: 15,
       contentRange: undefined,
     });
     mockStorage.getBucketName.mockReturnValue('streamtube');
   });
 
-  async function captureConfirmationToken(email: string, password = 'password123'): Promise<string> {
+  async function captureConfirmationToken(
+    email: string,
+    password = 'password123',
+  ): Promise<string> {
     const authService = app.get(AuthService);
     const mailServiceInstance = (authService as any).mailService;
     let capturedToken = '';
-    jest.spyOn(mailServiceInstance, 'sendConfirmationEmail').mockImplementationOnce(
-      async (_e: string, _n: string, t: string) => { capturedToken = t; },
-    );
-    await request(app.getHttpServer()).post('/auth/register').send({ email, password });
+    jest
+      .spyOn(mailServiceInstance, 'sendConfirmationEmail')
+      .mockImplementationOnce((_e: string, _n: string, t: string) => {
+        capturedToken = t;
+        return Promise.resolve();
+      });
+    await request(app.getHttpServer())
+      .post('/auth/register')
+      .send({ email, password });
     return capturedToken;
   }
 
@@ -93,9 +108,16 @@ describe('Videos (e2e)', () => {
     password = 'password123',
   ): Promise<{ access_token: string; refresh_token: string }> {
     const token = await captureConfirmationToken(email, password);
-    await request(app.getHttpServer()).get('/auth/confirm-email').query({ token });
-    const res = await request(app.getHttpServer()).post('/auth/login').send({ email, password });
-    return { access_token: res.body.access_token, refresh_token: res.body.refresh_token };
+    await request(app.getHttpServer())
+      .get('/auth/confirm-email')
+      .query({ token });
+    const res = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ email, password });
+    return {
+      access_token: res.body.access_token,
+      refresh_token: res.body.refresh_token,
+    };
   }
 
   async function getChannelId(userId: string): Promise<string> {
@@ -106,9 +128,11 @@ describe('Videos (e2e)', () => {
     return row[0].id as string;
   }
 
-  async function getUserIdFromToken(token: string): Promise<string> {
-    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
-    return payload.sub as string;
+  function getUserIdFromToken(token: string): string {
+    const payload = JSON.parse(
+      Buffer.from(token.split('.')[1], 'base64').toString(),
+    ) as { sub: string };
+    return payload.sub;
   }
 
   async function insertReadyVideo(channelId: string): Promise<string> {
@@ -125,12 +149,17 @@ describe('Videos (e2e)', () => {
 
   describe('Golden path (T053)', () => {
     it('POST /videos → status draft with upload_url and storage_key', async () => {
-      const { access_token } = await registerConfirmAndLogin('golden@example.com');
+      const { access_token } =
+        await registerConfirmAndLogin('golden@example.com');
 
       const res = await request(app.getHttpServer())
         .post('/videos')
         .set('Authorization', `Bearer ${access_token}`)
-        .send({ title: 'My First Video', file_size: 1024 * 1024, mime_type: 'video/mp4' })
+        .send({
+          title: 'My First Video',
+          file_size: 1024 * 1024,
+          mime_type: 'video/mp4',
+        })
         .expect(201);
 
       expect(res.body.id).toBeDefined();
@@ -140,7 +169,9 @@ describe('Videos (e2e)', () => {
     });
 
     it('storage_key matches pattern videos/{uuid}/original.{ext}', async () => {
-      const { access_token } = await registerConfirmAndLogin('golden2@example.com');
+      const { access_token } = await registerConfirmAndLogin(
+        'golden2@example.com',
+      );
 
       const res = await request(app.getHttpServer())
         .post('/videos')
@@ -148,21 +179,33 @@ describe('Videos (e2e)', () => {
         .send({ title: 'Test', file_size: 500, mime_type: 'video/webm' })
         .expect(201);
 
-      expect(res.body.storage_key).toMatch(/^videos\/[0-9a-f-]{36}\/original\.webm$/);
+      expect(res.body.storage_key).toMatch(
+        /^videos\/[0-9a-f-]{36}\/original\.webm$/,
+      );
     });
 
     it('two videos with same title receive distinct UUIDs (US5)', async () => {
-      const { access_token } = await registerConfirmAndLogin('golden3@example.com');
+      const { access_token } = await registerConfirmAndLogin(
+        'golden3@example.com',
+      );
 
       const [res1, res2] = await Promise.all([
         request(app.getHttpServer())
           .post('/videos')
           .set('Authorization', `Bearer ${access_token}`)
-          .send({ title: 'Duplicate Title', file_size: 1024, mime_type: 'video/mp4' }),
+          .send({
+            title: 'Duplicate Title',
+            file_size: 1024,
+            mime_type: 'video/mp4',
+          }),
         request(app.getHttpServer())
           .post('/videos')
           .set('Authorization', `Bearer ${access_token}`)
-          .send({ title: 'Duplicate Title', file_size: 1024, mime_type: 'video/mp4' }),
+          .send({
+            title: 'Duplicate Title',
+            file_size: 1024,
+            mime_type: 'video/mp4',
+          }),
       ]);
 
       expect(res1.status).toBe(201);
@@ -171,7 +214,9 @@ describe('Videos (e2e)', () => {
     });
 
     it('POST /videos/:id/upload-complete → status processing', async () => {
-      const { access_token } = await registerConfirmAndLogin('golden4@example.com');
+      const { access_token } = await registerConfirmAndLogin(
+        'golden4@example.com',
+      );
 
       const initRes = await request(app.getHttpServer())
         .post('/videos')
@@ -189,8 +234,10 @@ describe('Videos (e2e)', () => {
     });
 
     it('GET /videos/:id returns public metadata without errorCause', async () => {
-      const { access_token } = await registerConfirmAndLogin('golden5@example.com');
-      const userId = await getUserIdFromToken(access_token);
+      const { access_token } = await registerConfirmAndLogin(
+        'golden5@example.com',
+      );
+      const userId = getUserIdFromToken(access_token);
       const channelId = await getChannelId(userId);
       const videoId = await insertReadyVideo(channelId);
 
@@ -205,8 +252,10 @@ describe('Videos (e2e)', () => {
     });
 
     it('GET /videos/:id/stream returns 200 for ready video', async () => {
-      const { access_token } = await registerConfirmAndLogin('golden6@example.com');
-      const userId = await getUserIdFromToken(access_token);
+      const { access_token } = await registerConfirmAndLogin(
+        'golden6@example.com',
+      );
+      const userId = getUserIdFromToken(access_token);
       const channelId = await getChannelId(userId);
       const videoId = await insertReadyVideo(channelId);
 
@@ -219,8 +268,10 @@ describe('Videos (e2e)', () => {
     });
 
     it('GET /videos/:id/download → 200 with Content-Disposition attachment', async () => {
-      const { access_token } = await registerConfirmAndLogin('golden7@example.com');
-      const userId = await getUserIdFromToken(access_token);
+      const { access_token } = await registerConfirmAndLogin(
+        'golden7@example.com',
+      );
+      const userId = getUserIdFromToken(access_token);
       const channelId = await getChannelId(userId);
       const videoId = await insertReadyVideo(channelId);
 
@@ -233,8 +284,10 @@ describe('Videos (e2e)', () => {
     });
 
     it('GET /channels/:channelId/videos returns paginated list', async () => {
-      const { access_token } = await registerConfirmAndLogin('golden8@example.com');
-      const userId = await getUserIdFromToken(access_token);
+      const { access_token } = await registerConfirmAndLogin(
+        'golden8@example.com',
+      );
+      const userId = getUserIdFromToken(access_token);
       const channelId = await getChannelId(userId);
       await insertReadyVideo(channelId);
 
@@ -249,8 +302,10 @@ describe('Videos (e2e)', () => {
     });
 
     it('PATCH /videos/:id updates title, id remains unchanged', async () => {
-      const { access_token } = await registerConfirmAndLogin('golden9@example.com');
-      const userId = await getUserIdFromToken(access_token);
+      const { access_token } = await registerConfirmAndLogin(
+        'golden9@example.com',
+      );
+      const userId = getUserIdFromToken(access_token);
       const channelId = await getChannelId(userId);
       const videoId = await insertReadyVideo(channelId);
 
@@ -265,8 +320,10 @@ describe('Videos (e2e)', () => {
     });
 
     it('DELETE /videos/:id returns 204 and video no longer accessible', async () => {
-      const { access_token } = await registerConfirmAndLogin('golden10@example.com');
-      const userId = await getUserIdFromToken(access_token);
+      const { access_token } = await registerConfirmAndLogin(
+        'golden10@example.com',
+      );
+      const userId = getUserIdFromToken(access_token);
       const channelId = await getChannelId(userId);
       const videoId = await insertReadyVideo(channelId);
 
@@ -275,9 +332,7 @@ describe('Videos (e2e)', () => {
         .set('Authorization', `Bearer ${access_token}`)
         .expect(204);
 
-      await request(app.getHttpServer())
-        .get(`/videos/${videoId}`)
-        .expect(404);
+      await request(app.getHttpServer()).get(`/videos/${videoId}`).expect(404);
     });
   });
 
@@ -292,8 +347,10 @@ describe('Videos (e2e)', () => {
     });
 
     it('POST /videos/:id/upload-complete with token of different user → 403', async () => {
-      const { access_token: ownerToken } = await registerConfirmAndLogin('owner@example.com');
-      const { access_token: otherToken } = await registerConfirmAndLogin('other@example.com');
+      const { access_token: ownerToken } =
+        await registerConfirmAndLogin('owner@example.com');
+      const { access_token: otherToken } =
+        await registerConfirmAndLogin('other@example.com');
 
       const initRes = await request(app.getHttpServer())
         .post('/videos')
@@ -308,19 +365,19 @@ describe('Videos (e2e)', () => {
     });
 
     it('GET /videos/:id without token → 200 (public)', async () => {
-      const { access_token } = await registerConfirmAndLogin('pub1@example.com');
-      const userId = await getUserIdFromToken(access_token);
+      const { access_token } =
+        await registerConfirmAndLogin('pub1@example.com');
+      const userId = getUserIdFromToken(access_token);
       const channelId = await getChannelId(userId);
       const videoId = await insertReadyVideo(channelId);
 
-      await request(app.getHttpServer())
-        .get(`/videos/${videoId}`)
-        .expect(200);
+      await request(app.getHttpServer()).get(`/videos/${videoId}`).expect(200);
     });
 
     it('GET /videos/:id/stream without token → 200 (public)', async () => {
-      const { access_token } = await registerConfirmAndLogin('pub2@example.com');
-      const userId = await getUserIdFromToken(access_token);
+      const { access_token } =
+        await registerConfirmAndLogin('pub2@example.com');
+      const userId = getUserIdFromToken(access_token);
       const channelId = await getChannelId(userId);
       const videoId = await insertReadyVideo(channelId);
 
@@ -330,8 +387,9 @@ describe('Videos (e2e)', () => {
     });
 
     it('GET /videos/:id/download without token → 401', async () => {
-      const { access_token } = await registerConfirmAndLogin('auth1@example.com');
-      const userId = await getUserIdFromToken(access_token);
+      const { access_token } =
+        await registerConfirmAndLogin('auth1@example.com');
+      const userId = getUserIdFromToken(access_token);
       const channelId = await getChannelId(userId);
       const videoId = await insertReadyVideo(channelId);
 
@@ -341,9 +399,11 @@ describe('Videos (e2e)', () => {
     });
 
     it('GET /videos/:id/download with non-owner token → 200 (AUTH not OWNER)', async () => {
-      const { access_token: ownerToken } = await registerConfirmAndLogin('owner2@example.com');
-      const { access_token: otherToken } = await registerConfirmAndLogin('other2@example.com');
-      const userId = await getUserIdFromToken(ownerToken);
+      const { access_token: ownerToken } =
+        await registerConfirmAndLogin('owner2@example.com');
+      const { access_token: otherToken } =
+        await registerConfirmAndLogin('other2@example.com');
+      const userId = getUserIdFromToken(ownerToken);
       const channelId = await getChannelId(userId);
       const videoId = await insertReadyVideo(channelId);
 
@@ -354,9 +414,11 @@ describe('Videos (e2e)', () => {
     });
 
     it('DELETE /videos/:id with token of different channel → 403', async () => {
-      const { access_token: ownerToken } = await registerConfirmAndLogin('owner3@example.com');
-      const { access_token: otherToken } = await registerConfirmAndLogin('other3@example.com');
-      const userId = await getUserIdFromToken(ownerToken);
+      const { access_token: ownerToken } =
+        await registerConfirmAndLogin('owner3@example.com');
+      const { access_token: otherToken } =
+        await registerConfirmAndLogin('other3@example.com');
+      const userId = getUserIdFromToken(ownerToken);
       const channelId = await getChannelId(userId);
       const videoId = await insertReadyVideo(channelId);
 
@@ -367,7 +429,9 @@ describe('Videos (e2e)', () => {
     });
 
     it('GET /videos/:id/stream → 409 when video is not ready', async () => {
-      const { access_token } = await registerConfirmAndLogin('notready@example.com');
+      const { access_token } = await registerConfirmAndLogin(
+        'notready@example.com',
+      );
 
       const initRes = await request(app.getHttpServer())
         .post('/videos')

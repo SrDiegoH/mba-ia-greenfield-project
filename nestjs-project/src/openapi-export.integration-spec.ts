@@ -167,7 +167,8 @@ describe('exportSpec (integration)', () => {
     ];
     for (const [path, method] of protectedEndpoints) {
       const operation = paths[path]?.[method];
-      const security = operation?.security as Array<Record<string, unknown>> | undefined;
+      const security = operation?.security as
+        Array<Record<string, unknown>> | undefined;
       expect(security?.some((req) => 'access-token' in req)).toBe(true);
     }
 
@@ -177,8 +178,11 @@ describe('exportSpec (integration)', () => {
     ];
     for (const [path, method] of publicEndpoints) {
       const operation = paths[path]?.[method];
-      const security = operation?.security as Array<Record<string, unknown>> | undefined;
-      expect(!security || !security.some((req) => 'access-token' in req)).toBe(true);
+      const security = operation?.security as
+        Array<Record<string, unknown>> | undefined;
+      expect(!security || !security.some((req) => 'access-token' in req)).toBe(
+        true,
+      );
     }
   });
 });

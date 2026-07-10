@@ -5,11 +5,15 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Job } from 'bullmq';
-import * as ffmpeg from 'fluent-ffmpeg';
+import ffmpeg from 'fluent-ffmpeg';
 import * as ffprobeInstaller from '@ffprobe-installer/ffprobe';
 import { Video } from '../videos/entities/video.entity';
 import { StorageService } from '../storage/storage.service';
-import { VideoStatus, VIDEO_QUEUE_NAME, type VideoProcessingJob } from '../videos/videos.constants';
+import {
+  VideoStatus,
+  VIDEO_QUEUE_NAME,
+  type VideoProcessingJob,
+} from '../videos/videos.constants';
 
 interface FfprobeMetadata {
   duration: number;
@@ -40,14 +44,18 @@ export class VideoProcessingProcessor extends WorkerHost {
     const thumbPath = path.join(tmpDir, 'thumbnail.jpg');
 
     try {
-      const video = await this.videoRepository.findOne({ where: { id: videoId } });
+      const video = await this.videoRepository.findOne({
+        where: { id: videoId },
+      });
       if (!video) {
         this.logger.warn(`Video ${videoId} not found — discarding job`);
         return;
       }
 
       if (video.status !== VideoStatus.PROCESSING) {
-        this.logger.warn(`Video ${videoId} status is ${video.status} — discarding (idempotency)`);
+        this.logger.warn(
+          `Video ${videoId} status is ${video.status} — discarding (idempotency)`,
+        );
         return;
       }
 
@@ -72,7 +80,11 @@ export class VideoProcessingProcessor extends WorkerHost {
       // Upload thumbnail to storage
       const thumbnailKey = `videos/${videoId}/thumbnail.jpg`;
       const thumbBuffer = fs.readFileSync(thumbPath);
-      await this.storageService.putObject(thumbnailKey, thumbBuffer, 'image/jpeg');
+      await this.storageService.putObject(
+        thumbnailKey,
+        thumbBuffer,
+        'image/jpeg',
+      );
 
       // Update DB with success
       await this.videoRepository.update(videoId, {
@@ -89,20 +101,29 @@ export class VideoProcessingProcessor extends WorkerHost {
       });
 
       this.logger.log(`Video ${videoId} processed successfully`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       const isLastAttempt = job.attemptsMade >= (job.opts.attempts ?? 1) - 1;
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
 
       if (isLastAttempt) {
-        const errorMessage: string = err?.message ?? 'Unknown error';
-        await this.videoRepository.update(videoId, {
-          status: VideoStatus.ERROR,
-          error_cause: errorMessage.slice(0, 2048),
-        }).catch((dbErr) => {
-          this.logger.error(`Failed to update video ${videoId} to error status`, dbErr);
-        });
-        this.logger.error(`Video ${videoId} failed permanently after ${job.attemptsMade + 1} attempts: ${errorMessage}`);
+        await this.videoRepository
+          .update(videoId, {
+            status: VideoStatus.ERROR,
+            error_cause: errorMessage.slice(0, 2048),
+          })
+          .catch((dbErr) => {
+            this.logger.error(
+              `Failed to update video ${videoId} to error status`,
+              dbErr,
+            );
+          });
+        this.logger.error(
+          `Video ${videoId} failed permanently after ${job.attemptsMade + 1} attempts: ${errorMessage}`,
+        );
       } else {
-        this.logger.warn(`Video ${videoId} processing attempt ${job.attemptsMade + 1} failed: ${err?.message} — retrying`);
+        this.logger.warn(
+          `Video ${videoId} processing attempt ${job.attemptsMade + 1} failed: ${errorMessage} — retrying`,
+        );
       }
 
       throw err;
@@ -115,7 +136,7 @@ export class VideoProcessingProcessor extends WorkerHost {
     return new Promise((resolve, reject) => {
       ffmpeg.ffprobe(videoPath, (err, data) => {
         if (err) {
-          reject(err);
+          reject(err instanceof Error ? err : new Error(String(err)));
           return;
         }
         const videoStream = data.streams.find((s) => s.codec_type === 'video');
@@ -131,7 +152,10 @@ export class VideoProcessingProcessor extends WorkerHost {
     });
   }
 
-  private generateThumbnail(videoPath: string, outputPath: string): Promise<void> {
+  private generateThumbnail(
+    videoPath: string,
+    outputPath: string,
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
       ffmpeg(videoPath)
         .screenshots({

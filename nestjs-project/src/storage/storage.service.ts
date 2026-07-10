@@ -44,7 +44,17 @@ export class StorageService implements OnModuleInit {
     try {
       await this.client.send(new HeadBucketCommand({ Bucket: this.bucket }));
     } catch {
-      await this.client.send(new CreateBucketCommand({ Bucket: this.bucket }));
+      try {
+        await this.client.send(new CreateBucketCommand({ Bucket: this.bucket }));
+      } catch (createErr: unknown) {
+        if (
+          createErr instanceof Error &&
+          (createErr.name === 'BucketAlreadyOwnedByYou' ||
+            createErr.name === 'BucketAlreadyExists')
+        )
+          return;
+        throw createErr;
+      }
     }
   }
 
@@ -96,8 +106,8 @@ export class StorageService implements OnModuleInit {
       await this.client.send(
         new DeleteObjectCommand({ Bucket: this.bucket, Key: key }),
       );
-    } catch (err: any) {
-      if (err?.name === 'NoSuchKey') return;
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'NoSuchKey') return;
       throw err;
     }
   }

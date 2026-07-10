@@ -36,8 +36,19 @@ describe('Video entity (integration)', () => {
 
   beforeEach(async () => {
     await cleanTables(dataSource);
-    const user = await userRepo.save(userRepo.create({ email: `entity_test_${Date.now()}@test.com`, password: 'hash' }));
-    testChannel = await channelRepo.save(channelRepo.create({ name: 'Test', nickname: `nick_${Date.now()}`, user_id: user.id }));
+    const user = await userRepo.save(
+      userRepo.create({
+        email: `entity_test_${Date.now()}@test.com`,
+        password: 'hash',
+      }),
+    );
+    testChannel = await channelRepo.save(
+      channelRepo.create({
+        name: 'Test',
+        nickname: `nick_${Date.now()}`,
+        user_id: user.id,
+      }),
+    );
   });
 
   it('should insert a valid video record', async () => {

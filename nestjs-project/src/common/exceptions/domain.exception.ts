@@ -81,7 +81,11 @@ export class ChannelRequiredException extends DomainException {
 
 export class VideoUploadEnqueueException extends DomainException {
   constructor() {
-    super('UPLOAD_ENQUEUE_FAILED', 500, 'Failed to enqueue video processing job');
+    super(
+      'UPLOAD_ENQUEUE_FAILED',
+      500,
+      'Failed to enqueue video processing job',
+    );
   }
 }
 

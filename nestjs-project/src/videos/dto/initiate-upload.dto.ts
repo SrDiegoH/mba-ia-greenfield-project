@@ -16,7 +16,10 @@ export class InitiateUploadDto {
   @MaxLength(255)
   title: string;
 
-  @ApiProperty({ example: 104857600, description: 'File size in bytes (max 10 GB)' })
+  @ApiProperty({
+    example: 104857600,
+    description: 'File size in bytes (max 10 GB)',
+  })
   @IsInt()
   @Min(1)
   @Max(10_737_418_240)

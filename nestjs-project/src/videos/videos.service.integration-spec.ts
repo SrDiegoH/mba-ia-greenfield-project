@@ -1,6 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { getRepositoryToken, TypeOrmModule } from '@nestjs/typeorm';
-import { ConfigModule } from '@nestjs/config';
+import { getRepositoryToken } from '@nestjs/typeorm';
 import { getQueueToken } from '@nestjs/bullmq';
 import { DataSource, Repository } from 'typeorm';
 import { VideosService } from './videos.service';
@@ -8,7 +7,11 @@ import { Video } from './entities/video.entity';
 import { Channel } from '../channels/entities/channel.entity';
 import { StorageService } from '../storage/storage.service';
 import { VideoStatus, VIDEO_QUEUE_NAME } from './videos.constants';
-import { VideoNotFoundException, VideoOwnershipException, VideoNotDraftException } from '../common/exceptions/domain.exception';
+import {
+  VideoNotFoundException,
+  VideoOwnershipException,
+  VideoNotDraftException,
+} from '../common/exceptions/domain.exception';
 import { User } from '../users/entities/user.entity';
 import { RefreshToken } from '../auth/entities/refresh-token.entity';
 import { VerificationToken } from '../auth/entities/verification-token.entity';
@@ -30,9 +33,16 @@ const mockQueue = {
   getJob: jest.fn().mockResolvedValue(null),
 };
 
-const mockStorageCfg = { endpoint: 'http://minio:9000', bucket: 'streamtube', accessKey: 'x', secretKey: 'x' };
+const mockStorageCfg = {
+  endpoint: 'http://minio:9000',
+  bucket: 'streamtube',
+  accessKey: 'x',
+  secretKey: 'x',
+};
 
 async function cleanTables(ds: DataSource): Promise<void> {
+  await ds.query('DELETE FROM "refresh_tokens"');
+  await ds.query('DELETE FROM "verification_tokens"');
   await ds.query('DELETE FROM "videos"');
   await ds.query('DELETE FROM "channels"');
   await ds.query('DELETE FROM "users"');
@@ -77,15 +87,30 @@ describe('VideosService (integration)', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     await cleanTables(dataSource);
-    testUser = await userRepo.save(userRepo.create({ email: `svc_int_${Date.now()}@test.com`, password: 'hash' }));
-    testChannel = await channelRepo.save(channelRepo.create({ name: 'Test', nickname: `nick_${Date.now()}`, user_id: testUser.id }));
+    testUser = await userRepo.save(
+      userRepo.create({
+        email: `svc_int_${Date.now()}@test.com`,
+        password: 'hash',
+      }),
+    );
+    testChannel = await channelRepo.save(
+      channelRepo.create({
+        name: 'Test',
+        nickname: `nick_${Date.now()}`,
+        user_id: testUser.id,
+      }),
+    );
   });
 
   // ── initiateUpload ──────────────────────────────────────────────────────────
 
   describe('initiateUpload (US1+US5)', () => {
     it('two videos with same title receive distinct UUIDs (US5)', async () => {
-      const dto = { title: 'Duplicate Title', file_size: 1024, mime_type: 'video/mp4' };
+      const dto = {
+        title: 'Duplicate Title',
+        file_size: 1024,
+        mime_type: 'video/mp4',
+      };
       const r1 = await service.initiateUpload(testUser.id, dto);
       const r2 = await service.initiateUpload(testUser.id, dto);
 
@@ -93,7 +118,11 @@ describe('VideosService (integration)', () => {
     });
 
     it('storage_key is NOT NULL after creation', async () => {
-      await service.initiateUpload(testUser.id, { title: 'Test', file_size: 1024, mime_type: 'video/mp4' });
+      await service.initiateUpload(testUser.id, {
+        title: 'Test',
+        file_size: 1024,
+        mime_type: 'video/mp4',
+      });
 
       const videos = await videoRepo.find();
       expect(videos[0].storage_key).not.toBeNull();
@@ -101,14 +130,22 @@ describe('VideosService (integration)', () => {
     });
 
     it('initial status is draft', async () => {
-      await service.initiateUpload(testUser.id, { title: 'Test', file_size: 1024, mime_type: 'video/mp4' });
+      await service.initiateUpload(testUser.id, {
+        title: 'Test',
+        file_size: 1024,
+        mime_type: 'video/mp4',
+      });
 
       const videos = await videoRepo.find();
       expect(videos[0].status).toBe(VideoStatus.DRAFT);
     });
 
     it('channel_id references the correct channel', async () => {
-      await service.initiateUpload(testUser.id, { title: 'Test', file_size: 1024, mime_type: 'video/mp4' });
+      await service.initiateUpload(testUser.id, {
+        title: 'Test',
+        file_size: 1024,
+        mime_type: 'video/mp4',
+      });
 
       const videos = await videoRepo.find();
       expect(videos[0].channel_id).toBe(testChannel.id);
@@ -119,7 +156,11 @@ describe('VideosService (integration)', () => {
 
   describe('confirmUpload (US2)', () => {
     it('should transition draft to processing in DB', async () => {
-      const { id } = await service.initiateUpload(testUser.id, { title: 'T', file_size: 1, mime_type: 'video/mp4' });
+      const { id } = await service.initiateUpload(testUser.id, {
+        title: 'T',
+        file_size: 1,
+        mime_type: 'video/mp4',
+      });
 
       const result = await service.confirmUpload(id, testUser.id);
 
@@ -129,17 +170,34 @@ describe('VideosService (integration)', () => {
     });
 
     it('should throw BadRequestException for video already in processing', async () => {
-      const { id } = await service.initiateUpload(testUser.id, { title: 'T', file_size: 1, mime_type: 'video/mp4' });
+      const { id } = await service.initiateUpload(testUser.id, {
+        title: 'T',
+        file_size: 1,
+        mime_type: 'video/mp4',
+      });
       await service.confirmUpload(id, testUser.id);
 
-      await expect(service.confirmUpload(id, testUser.id)).rejects.toThrow(VideoNotDraftException);
+      await expect(service.confirmUpload(id, testUser.id)).rejects.toThrow(
+        VideoNotDraftException,
+      );
     });
 
     it('should throw VideoOwnershipException for different user', async () => {
-      const otherUser = await userRepo.save(userRepo.create({ email: `other_${Date.now()}@test.com`, password: 'hash' }));
-      const { id } = await service.initiateUpload(testUser.id, { title: 'T', file_size: 1, mime_type: 'video/mp4' });
+      const otherUser = await userRepo.save(
+        userRepo.create({
+          email: `other_${Date.now()}@test.com`,
+          password: 'hash',
+        }),
+      );
+      const { id } = await service.initiateUpload(testUser.id, {
+        title: 'T',
+        file_size: 1,
+        mime_type: 'video/mp4',
+      });
 
-      await expect(service.confirmUpload(id, otherUser.id)).rejects.toThrow(VideoOwnershipException);
+      await expect(service.confirmUpload(id, otherUser.id)).rejects.toThrow(
+        VideoOwnershipException,
+      );
     });
   });
 
@@ -147,7 +205,11 @@ describe('VideosService (integration)', () => {
 
   describe('findById (US3)', () => {
     it('should return existing video', async () => {
-      const { id } = await service.initiateUpload(testUser.id, { title: 'T', file_size: 1, mime_type: 'video/mp4' });
+      const { id } = await service.initiateUpload(testUser.id, {
+        title: 'T',
+        file_size: 1,
+        mime_type: 'video/mp4',
+      });
 
       const result = await service.findById(id);
 
@@ -155,11 +217,17 @@ describe('VideosService (integration)', () => {
     });
 
     it('should throw VideoNotFoundException for unknown UUID', async () => {
-      await expect(service.findById('00000000-0000-0000-0000-000000000000')).rejects.toThrow(VideoNotFoundException);
+      await expect(
+        service.findById('00000000-0000-0000-0000-000000000000'),
+      ).rejects.toThrow(VideoNotFoundException);
     });
 
     it('should not include error_cause in public view', async () => {
-      const { id } = await service.initiateUpload(testUser.id, { title: 'T', file_size: 1, mime_type: 'video/mp4' });
+      const { id } = await service.initiateUpload(testUser.id, {
+        title: 'T',
+        file_size: 1,
+        mime_type: 'video/mp4',
+      });
       await videoRepo.update(id, { error_cause: 'internal error' });
 
       const result = await service.findById(id);
@@ -173,10 +241,18 @@ describe('VideosService (integration)', () => {
   describe('listChannelVideos (US6)', () => {
     it('should return paginated videos with has_next_page', async () => {
       for (let i = 0; i < 25; i++) {
-        await service.initiateUpload(testUser.id, { title: `Video ${i}`, file_size: 1, mime_type: 'video/mp4' });
+        await service.initiateUpload(testUser.id, {
+          title: `Video ${i}`,
+          file_size: 1,
+          mime_type: 'video/mp4',
+        });
       }
 
-      const result = await service.listChannelVideos(testChannel.id, testUser.id, { page: 1, limit: 20 });
+      const result = await service.listChannelVideos(
+        testChannel.id,
+        testUser.id,
+        { page: 1, limit: 20 },
+      );
 
       expect(result.items).toHaveLength(20);
       expect(result.total).toBe(25);
@@ -184,19 +260,33 @@ describe('VideosService (integration)', () => {
     });
 
     it('should throw VideoOwnershipException for different user', async () => {
-      const otherUser = await userRepo.save(userRepo.create({ email: `other2_${Date.now()}@test.com`, password: 'hash' }));
+      const otherUser = await userRepo.save(
+        userRepo.create({
+          email: `other2_${Date.now()}@test.com`,
+          password: 'hash',
+        }),
+      );
 
       await expect(
-        service.listChannelVideos(testChannel.id, otherUser.id, { page: 1, limit: 20 }),
+        service.listChannelVideos(testChannel.id, otherUser.id, {
+          page: 1,
+          limit: 20,
+        }),
       ).rejects.toThrow(VideoOwnershipException);
     });
   });
 
   describe('updateTitle (US6)', () => {
     it('should persist new title without changing id', async () => {
-      const { id } = await service.initiateUpload(testUser.id, { title: 'Original', file_size: 1, mime_type: 'video/mp4' });
+      const { id } = await service.initiateUpload(testUser.id, {
+        title: 'Original',
+        file_size: 1,
+        mime_type: 'video/mp4',
+      });
 
-      const result = await service.updateTitle(id, testUser.id, { title: 'Updated' });
+      const result = await service.updateTitle(id, testUser.id, {
+        title: 'Updated',
+      });
 
       expect(result.id).toBe(id);
       const db = await videoRepo.findOne({ where: { id } });
@@ -206,18 +296,35 @@ describe('VideosService (integration)', () => {
 
   describe('deleteVideo (US6)', () => {
     it('should remove video from DB', async () => {
-      const { id } = await service.initiateUpload(testUser.id, { title: 'T', file_size: 1, mime_type: 'video/mp4' });
+      const { id } = await service.initiateUpload(testUser.id, {
+        title: 'T',
+        file_size: 1,
+        mime_type: 'video/mp4',
+      });
 
       await service.deleteVideo(id, testUser.id);
 
-      await expect(service.findById(id)).rejects.toThrow(VideoNotFoundException);
+      await expect(service.findById(id)).rejects.toThrow(
+        VideoNotFoundException,
+      );
     });
 
     it('should throw VideoOwnershipException for different user', async () => {
-      const otherUser = await userRepo.save(userRepo.create({ email: `other3_${Date.now()}@test.com`, password: 'hash' }));
-      const { id } = await service.initiateUpload(testUser.id, { title: 'T', file_size: 1, mime_type: 'video/mp4' });
+      const otherUser = await userRepo.save(
+        userRepo.create({
+          email: `other3_${Date.now()}@test.com`,
+          password: 'hash',
+        }),
+      );
+      const { id } = await service.initiateUpload(testUser.id, {
+        title: 'T',
+        file_size: 1,
+        mime_type: 'video/mp4',
+      });
 
-      await expect(service.deleteVideo(id, otherUser.id)).rejects.toThrow(VideoOwnershipException);
+      await expect(service.deleteVideo(id, otherUser.id)).rejects.toThrow(
+        VideoOwnershipException,
+      );
     });
   });
 });

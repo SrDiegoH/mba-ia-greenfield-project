@@ -32,27 +32,54 @@ describe('VideosController', () => {
 
   describe('initiateUpload (POST /videos)', () => {
     it('should return 201 payload with upload_url and storage_key', async () => {
-      const expected = { id: 'v-uuid', status: VideoStatus.DRAFT, upload_url: 'https://presigned', storage_key: 'videos/v-uuid/original.mp4' };
+      const expected = {
+        id: 'v-uuid',
+        status: VideoStatus.DRAFT,
+        upload_url: 'https://presigned',
+        storage_key: 'videos/v-uuid/original.mp4',
+      };
       mockVideosService.initiateUpload.mockResolvedValue(expected);
 
-      const result = await controller.initiateUpload({ title: 'Video', file_size: 1024, mime_type: 'video/mp4' }, mockUser);
+      const result = await controller.initiateUpload(
+        { title: 'Video', file_size: 1024, mime_type: 'video/mp4' },
+        mockUser,
+      );
 
       expect(result).toEqual(expected);
-      expect(mockVideosService.initiateUpload).toHaveBeenCalledWith('user-uuid', expect.any(Object));
+      expect(mockVideosService.initiateUpload).toHaveBeenCalledWith(
+        'user-uuid',
+        expect.any(Object),
+      );
     });
 
     it('should extract userId from JWT sub', async () => {
       mockVideosService.initiateUpload.mockResolvedValue({});
 
-      await controller.initiateUpload({ title: 'v', file_size: 1, mime_type: 'video/mp4' }, mockUser);
+      await controller.initiateUpload(
+        { title: 'v', file_size: 1, mime_type: 'video/mp4' },
+        mockUser,
+      );
 
-      expect(mockVideosService.initiateUpload).toHaveBeenCalledWith('user-uuid', expect.any(Object));
+      expect(mockVideosService.initiateUpload).toHaveBeenCalledWith(
+        'user-uuid',
+        expect.any(Object),
+      );
     });
   });
 
   describe('findById (GET /videos/:id)', () => {
     it('should return video public view', async () => {
-      const expected = { id: 'v', title: 'Test', status: VideoStatus.READY, thumbnail_url: null, duration_seconds: 60, processing_metadata: null, channel_id: 'ch', created_at: new Date(), updated_at: new Date() };
+      const expected = {
+        id: 'v',
+        title: 'Test',
+        status: VideoStatus.READY,
+        thumbnail_url: null,
+        duration_seconds: 60,
+        processing_metadata: null,
+        channel_id: 'ch',
+        created_at: new Date(),
+        updated_at: new Date(),
+      };
       mockVideosService.findById.mockResolvedValue(expected);
 
       const result = await controller.findById('v');
@@ -63,13 +90,26 @@ describe('VideosController', () => {
 
   describe('updateTitle (PATCH /videos/:id)', () => {
     it('should delegate to service with id and userId', async () => {
-      const expected = { id: 'v', title: 'New', status: VideoStatus.DRAFT, updated_at: new Date() };
+      const expected = {
+        id: 'v',
+        title: 'New',
+        status: VideoStatus.DRAFT,
+        updated_at: new Date(),
+      };
       mockVideosService.updateTitle.mockResolvedValue(expected);
 
-      const result = await controller.updateTitle('v', { title: 'New' }, mockUser);
+      const result = await controller.updateTitle(
+        'v',
+        { title: 'New' },
+        mockUser,
+      );
 
       expect(result).toEqual(expected);
-      expect(mockVideosService.updateTitle).toHaveBeenCalledWith('v', 'user-uuid', { title: 'New' });
+      expect(mockVideosService.updateTitle).toHaveBeenCalledWith(
+        'v',
+        'user-uuid',
+        { title: 'New' },
+      );
     });
   });
 
@@ -79,7 +119,10 @@ describe('VideosController', () => {
 
       await controller.deleteVideo('v', mockUser);
 
-      expect(mockVideosService.deleteVideo).toHaveBeenCalledWith('v', 'user-uuid');
+      expect(mockVideosService.deleteVideo).toHaveBeenCalledWith(
+        'v',
+        'user-uuid',
+      );
     });
   });
 });
