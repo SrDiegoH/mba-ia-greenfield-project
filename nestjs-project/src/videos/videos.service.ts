@@ -7,6 +7,7 @@ import { Repository } from 'typeorm';
 import { Queue } from 'bullmq';
 import { StorageService } from '../storage/storage.service';
 import {
+  ChannelNotFoundException,
   ChannelRequiredException,
   VideoNotFoundException,
   VideoNotDraftException,
@@ -209,7 +210,10 @@ export class VideosService {
     const channel = await this.channelRepository.findOne({
       where: { id: channelId },
     });
-    if (!channel || channel.user_id !== userId) {
+    if (!channel) {
+      throw new ChannelNotFoundException(channelId);
+    }
+    if (channel.user_id !== userId) {
       throw new VideoOwnershipException();
     }
 

@@ -8,6 +8,7 @@ import { Channel } from '../channels/entities/channel.entity';
 import { StorageService } from '../storage/storage.service';
 import { VideoStatus, VIDEO_QUEUE_NAME } from './videos.constants';
 import {
+  ChannelNotFoundException,
   ChannelRequiredException,
   VideoNotFoundException,
   VideoNotDraftException,
@@ -365,6 +366,17 @@ describe('VideosService', () => {
           limit: 20,
         }),
       ).rejects.toThrow(VideoOwnershipException);
+    });
+
+    it('should throw ChannelNotFoundException when channel does not exist', async () => {
+      channelRepo.findOne = jest.fn().mockResolvedValue(null);
+
+      await expect(
+        service.listChannelVideos('nonexistent-channel', 'user-uuid', {
+          page: 1,
+          limit: 20,
+        }),
+      ).rejects.toThrow(ChannelNotFoundException);
     });
   });
 

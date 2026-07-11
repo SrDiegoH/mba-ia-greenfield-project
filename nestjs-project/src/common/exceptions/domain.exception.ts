@@ -63,19 +63,25 @@ export class VideoNotReadyException extends DomainException {
 
 export class VideoNotDraftException extends DomainException {
   constructor() {
-    super('VIDEO_NOT_DRAFT', 400, 'Video is not in draft status');
+    super('INVALID_VIDEO_STATUS', 400, 'Video is not in draft status');
   }
 }
 
 export class VideoOwnershipException extends DomainException {
   constructor() {
-    super('VIDEO_FORBIDDEN', 403, 'You do not own this video');
+    super('VIDEO_OWNERSHIP', 403, 'You do not own this video');
   }
 }
 
 export class ChannelRequiredException extends DomainException {
   constructor() {
     super('CHANNEL_REQUIRED', 403, 'You must have a channel to upload videos');
+  }
+}
+
+export class ChannelNotFoundException extends DomainException {
+  constructor(id: string) {
+    super('CHANNEL_NOT_FOUND', 404, `Channel ${id} not found`);
   }
 }
 
@@ -91,6 +97,6 @@ export class VideoUploadEnqueueException extends DomainException {
 
 export class VideoRangeNotSatisfiableException extends DomainException {
   constructor() {
-    super('RANGE_NOT_SATISFIABLE', 416, 'Range not satisfiable');
+    super('VIDEO_RANGE_NOT_SATISFIABLE', 416, 'Range not satisfiable');
   }
 }

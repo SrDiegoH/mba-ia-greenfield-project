@@ -8,6 +8,7 @@ import { Channel } from '../channels/entities/channel.entity';
 import { StorageService } from '../storage/storage.service';
 import { VideoStatus, VIDEO_QUEUE_NAME } from './videos.constants';
 import {
+  ChannelNotFoundException,
   VideoNotFoundException,
   VideoOwnershipException,
   VideoNotDraftException,
@@ -275,6 +276,16 @@ describe('VideosService (integration)', () => {
           limit: 20,
         }),
       ).rejects.toThrow(VideoOwnershipException);
+    });
+
+    it('should throw ChannelNotFoundException for non-existent channel', async () => {
+      const fakeChannelId = '00000000-0000-0000-0000-000000000000';
+      await expect(
+        service.listChannelVideos(fakeChannelId, testUser.id, {
+          page: 1,
+          limit: 20,
+        }),
+      ).rejects.toThrow(ChannelNotFoundException);
     });
   });
 

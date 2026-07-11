@@ -477,5 +477,16 @@ describe('Videos (e2e)', () => {
         .get(`/videos/${nonExistentId}`)
         .expect(404);
     });
+
+    it('GET /channels/:channelId/videos → 404 for nonexistent channel', async () => {
+      const { access_token } =
+        await registerConfirmAndLogin('ch404@example.com');
+      const nonExistentChannelId = crypto.randomUUID();
+
+      await request(app.getHttpServer())
+        .get(`/channels/${nonExistentChannelId}/videos`)
+        .set('Authorization', `Bearer ${access_token}`)
+        .expect(404);
+    });
   });
 });
