@@ -18,6 +18,7 @@ import { RefreshToken } from '../auth/entities/refresh-token.entity';
 import { VerificationToken } from '../auth/entities/verification-token.entity';
 import storageConfig from '../config/storage.config';
 import { createTestDataSource } from '../test/create-test-data-source';
+import { Readable } from 'stream';
 
 const ALL_ENTITIES = [User, Channel, RefreshToken, VerificationToken, Video];
 
@@ -339,9 +340,9 @@ describe('VideosService (integration)', () => {
         mime_type: 'video/mp4',
       });
       await videoRepo.update(id, { status: VideoStatus.READY });
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
+
       mockStorageService.getObject.mockResolvedValueOnce({
-        stream: require('stream').Readable.from(['data']),
+        stream: Readable.from(['data']),
         contentType: 'video/mp4',
         contentLength: 4,
       });

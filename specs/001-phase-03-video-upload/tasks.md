@@ -6,6 +6,8 @@
 
 **User Stories**: US1 (P1), US2 (P2), US5 (P2 → merged into US1), US3 (P3), US6 (P3), US4 (P4)
 
+**Convenção de Nomenclatura**: descrições de tasks usam nomes de exceção HTTP do NestJS como shorthand (ex.: `ForbiddenException`, `NotFoundException`, `ConflictException`) — a implementação usa exceções de domínio do projeto (ex.: `VideoOwnershipException`, `ChannelRequiredException`, `VideoNotFoundException`, `VideoNotReadyException`). Ver `src/videos/exceptions/` para o mapeamento completo.
+
 ---
 
 ## Phase 1: Setup — Infraestrutura & Dependências
@@ -133,6 +135,7 @@
 - [X] T050 [US4] Implementar `GET /videos/:id/download` em `nestjs-project/src/videos/videos.controller.ts`: `@ApiBearerAuth()` (AUTH, não OWNER), `@Get(':id/download')`; chamar `downloadVideo()`; setar headers `Content-Type`, `Content-Length`, `Content-Disposition: attachment; filename="..."` (RFC 5987); fazer pipe do stream para `@Res() res`; `@ApiResponse` para 200, 401, 404, 409
 - [X] T051 [P] [US4] Unit test `nestjs-project/src/videos/videos.service.spec.ts` (seção `downloadVideo`): mock de `Repository<Video>` e `StorageService`; casos: `status=READY` → stream retornado com `filename` correto; `status=PROCESSING` → `ConflictException`; ID inexistente → `NotFoundException`
 - [X] T052 [P] [US4] Unit test `nestjs-project/src/videos/videos.controller.spec.ts` (seção download): casos: sem Bearer token → 401 (sem `@Public()`); `Content-Disposition` header presente na resposta; dono e não-dono ambos conseguem baixar (somente AUTH, não OWNER)
+- [X] T058 [P] [US4] Integration test `nestjs-project/src/videos/videos.service.integration-spec.ts` (seção `downloadVideo`): BD real; casos: `status=READY` → stream retornado corretamente; `status=PROCESSING` → `VideoNotReadyException`; ID inexistente → `VideoNotFoundException` — adicionado via remediação C1 do speckit-analyze; não constava no planejamento original
 
 **Checkpoint**: US4 funcional. Todas as 6 User Stories implementadas.
 
@@ -146,7 +149,7 @@
 - [X] T054 [P] E2E test `nestjs-project/test/videos.e2e-spec.ts` — autorização: POST /videos sem token → 401; POST /videos/:id/upload-complete com token de outro usuário → 403; GET /videos/:id sem token → 200 (público); GET /videos/:id/stream sem token → 200/206 (público); GET /videos/:id/download sem token → 401; DELETE /videos/:id com token de outro canal → 403
 - [X] T055 Atualizar export OpenAPI: executar `nestjs-project/src/openapi-export.ts` (ou `npm run swagger`) e verificar que os 8 endpoints de vídeo (`POST /videos`, `POST /videos/:id/upload-complete`, `GET /videos/:id`, `GET /videos/:id/stream`, `GET /videos/:id/download`, `GET /channels/:channelId/videos`, `PATCH /videos/:id`, `DELETE /videos/:id`) aparecem no `openapi.json` gerado com auth levels e schemas corretos
 - [X] T056 Validar Definition of Done: `npx tsc --noEmit` (sem erros de TypeScript), `npm run lint` (sem warnings), `npm test` (unit + integration passando), `npm run test:e2e` (E2E passando com `--runInBand`), `npm run migration:run` não tem migrações pendentes — **REQUER CONTAINERS: executar dentro do container após `docker compose up -d`**
-- [ ] T057 Executar cenários do `quickstart.md` manualmente para validação end-to-end final: os 9 cenários curl cobrem o fluxo completo — **REQUER CONTAINERS COMPLETOS (API + Redis + MinIO + worker)**
+- [X] T057 Executar cenários do `quickstart.md` manualmente para validação end-to-end final: os 9 cenários curl cobrem o fluxo completo — **REQUER CONTAINERS COMPLETOS (API + Redis + MinIO + worker)** — todos os 16 checkpoints passaram; C9 (range inválido → 416) exigiu fix de bug em `streamVideo` para capturar `$metadata.httpStatusCode === 416` do AWS SDK
 
 ---
 
@@ -209,6 +212,7 @@ T047  # Unit: videos.service.spec.ts (list + update + delete)
 # Phase 7 — US4 (testes em paralelo):
 T051  # Unit: videos.service.spec.ts (downloadVideo)
 T052  # Unit: videos.controller.spec.ts (GET /download)
+T058  # Integration: videos.service.integration-spec.ts (downloadVideo)
 
 # Phase Final (em paralelo):
 T053  # E2E: golden path
@@ -248,8 +252,8 @@ T054  # E2E: autorização
 | Phase 4 — US2 | 7 | T028, T029 |
 | Phase 5 — US3 | 7 | T036, T037 |
 | Phase 6 — US6 | 10 | T047 |
-| Phase 7 — US4 | 4 | T051, T052 |
+| Phase 7 — US4 | 5 | T051, T052, T058 |
 | Phase Final | 5 | T053, T054 |
-| **Total** | **57** | **18 paralelas** |
+| **Total** | **58** | **19 paralelas** |
 
 **MVP mínimo**: Phases 1 + 2 + 3 = 24 tarefas → US1 entregue: upload funcional com UUID único e URL pré-assinada.

@@ -13,6 +13,7 @@ import {
   VideoNotDraftException,
   VideoNotReadyException,
   VideoOwnershipException,
+  VideoRangeNotSatisfiableException,
   VideoUploadEnqueueException,
 } from '../common/exceptions/domain.exception';
 import storageConfig from '../config/storage.config';
@@ -303,6 +304,20 @@ describe('VideosService', () => {
       await expect(service.streamVideo('video-uuid')).rejects.toThrow(
         VideoNotReadyException,
       );
+    });
+
+    it('should throw VideoRangeNotSatisfiableException when storage returns 416', async () => {
+      videoRepo.findOne = jest
+        .fn()
+        .mockResolvedValue(makeVideo({ status: VideoStatus.READY }));
+      const rangeError = Object.assign(new Error('InvalidRange'), {
+        $metadata: { httpStatusCode: 416 },
+      });
+      mockStorageService.getObject.mockRejectedValue(rangeError);
+
+      await expect(
+        service.streamVideo('video-uuid', 'bytes=99999-99999'),
+      ).rejects.toThrow(VideoRangeNotSatisfiableException);
     });
   });
 

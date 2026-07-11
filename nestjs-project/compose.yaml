@@ -94,6 +94,8 @@ services:
       - STORAGE_BUCKET=streamtube
       - REDIS_HOST=redis
       - REDIS_PORT=6379
+      - JWT_SECRET=change-me-in-production
+      - JWT_REFRESH_SECRET=change-me-refresh-in-production
 
 volumes:
   minio_data:

@@ -12,6 +12,7 @@ import {
   VideoNotDraftException,
   VideoNotReadyException,
   VideoOwnershipException,
+  VideoRangeNotSatisfiableException,
   VideoUploadEnqueueException,
 } from '../common/exceptions/domain.exception';
 import { Channel } from '../channels/entities/channel.entity';
@@ -176,17 +177,28 @@ export class VideosService {
       throw new VideoNotReadyException();
     }
 
-    const result = await this.storageService.getObject(
-      video.storage_key,
-      rangeHeader,
-    );
-    return {
-      stream: result.stream,
-      contentType: result.contentType,
-      contentLength: result.contentLength,
-      contentRange: result.contentRange,
-      statusCode: rangeHeader ? 206 : 200,
-    };
+    try {
+      const result = await this.storageService.getObject(
+        video.storage_key,
+        rangeHeader,
+      );
+      return {
+        stream: result.stream,
+        contentType: result.contentType,
+        contentLength: result.contentLength,
+        contentRange: result.contentRange,
+        statusCode: rangeHeader ? 206 : 200,
+      };
+    } catch (err: unknown) {
+      if (
+        err instanceof Error &&
+        (err as { $metadata?: { httpStatusCode?: number } }).$metadata
+          ?.httpStatusCode === 416
+      ) {
+        throw new VideoRangeNotSatisfiableException();
+      }
+      throw err;
+    }
   }
 
   async listChannelVideos(
