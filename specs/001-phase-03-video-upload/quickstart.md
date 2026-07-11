@@ -139,8 +139,9 @@ curl -s "http://localhost:3000/videos/$VIDEO_ID/download" | jq .
 ## Cenário 5: Listagem paginada do canal
 
 ```bash
-# Descobrir channelId do usuário (via GET /auth/me + join com canal)
-CHANNEL_ID="..." # substituir pelo channel_id do usuário
+# Obter channelId a partir do vídeo já criado no Cenário 1
+CHANNEL_ID=$(curl -s "http://localhost:3000/videos/$VIDEO_ID" | jq -r '.channel_id')
+echo "Channel ID: $CHANNEL_ID"
 
 curl -s "http://localhost:3000/channels/$CHANNEL_ID/videos?page=1&limit=5" \
   -H "Authorization: Bearer $TOKEN" | jq .

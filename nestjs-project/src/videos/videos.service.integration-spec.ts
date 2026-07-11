@@ -11,6 +11,7 @@ import {
   VideoNotFoundException,
   VideoOwnershipException,
   VideoNotDraftException,
+  VideoNotReadyException,
 } from '../common/exceptions/domain.exception';
 import { User } from '../users/entities/user.entity';
 import { RefreshToken } from '../auth/entities/refresh-token.entity';
@@ -325,6 +326,49 @@ describe('VideosService (integration)', () => {
       await expect(service.deleteVideo(id, otherUser.id)).rejects.toThrow(
         VideoOwnershipException,
       );
+    });
+  });
+
+  // ── downloadVideo ───────────────────────────────────────────────────────────
+
+  describe('downloadVideo (US4)', () => {
+    it('should return stream and filename for a ready video', async () => {
+      const { id } = await service.initiateUpload(testUser.id, {
+        title: 'Meu Vídeo',
+        file_size: 1,
+        mime_type: 'video/mp4',
+      });
+      await videoRepo.update(id, { status: VideoStatus.READY });
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      mockStorageService.getObject.mockResolvedValueOnce({
+        stream: require('stream').Readable.from(['data']),
+        contentType: 'video/mp4',
+        contentLength: 4,
+      });
+
+      const result = await service.downloadVideo(id);
+
+      expect(result.filename).toMatch(/\.mp4$/);
+      expect(result.contentType).toBe('video/mp4');
+      expect(result.contentLength).toBe(4);
+    });
+
+    it('should throw VideoNotReadyException when status is draft', async () => {
+      const { id } = await service.initiateUpload(testUser.id, {
+        title: 'T',
+        file_size: 1,
+        mime_type: 'video/mp4',
+      });
+
+      await expect(service.downloadVideo(id)).rejects.toThrow(
+        VideoNotReadyException,
+      );
+    });
+
+    it('should throw VideoNotFoundException for unknown UUID', async () => {
+      await expect(
+        service.downloadVideo('00000000-0000-0000-0000-000000000000'),
+      ).rejects.toThrow(VideoNotFoundException);
     });
   });
 });

@@ -5,13 +5,14 @@ import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { DataSource } from 'typeorm';
+import { getQueueToken } from '@nestjs/bullmq';
 import { ThrottlerStorage, ThrottlerStorageService } from '@nestjs/throttler';
 import { AppModule } from '../src/app.module';
 import { AuthService } from '../src/auth/auth.service';
 import { DomainExceptionFilter } from '../src/common/filters/domain-exception.filter';
 import { ValidationExceptionFilter } from '../src/common/filters/validation-exception.filter';
 import { StorageService } from '../src/storage/storage.service';
-import { VideoStatus } from '../src/videos/videos.constants';
+import { VIDEO_QUEUE_NAME, VideoStatus } from '../src/videos/videos.constants';
 import { cleanAllTables } from '../src/test/create-test-data-source';
 
 const mockStorage = {
@@ -62,6 +63,7 @@ describe('Videos (e2e)', () => {
     dataSource = moduleFixture.get(DataSource);
     throttlerStorage =
       moduleFixture.get<ThrottlerStorageService>(ThrottlerStorage);
+    moduleFixture.get(getQueueToken(VIDEO_QUEUE_NAME)).on('error', () => {});
   });
 
   afterAll(async () => {
@@ -263,6 +265,31 @@ describe('Videos (e2e)', () => {
         .get(`/videos/${videoId}/stream`)
         .expect(200);
 
+      expect(res.headers['accept-ranges']).toBe('bytes');
+      expect(res.headers['content-type']).toContain('video/mp4');
+    });
+
+    it('GET /videos/:id/stream with Range header → 206 with Content-Range', async () => {
+      const { access_token } = await registerConfirmAndLogin(
+        'golden6b@example.com',
+      );
+      const userId = getUserIdFromToken(access_token);
+      const channelId = await getChannelId(userId);
+      const videoId = await insertReadyVideo(channelId);
+
+      mockStorage.getObject.mockResolvedValueOnce({
+        stream: Readable.from(['fake video data']),
+        contentType: 'video/mp4',
+        contentLength: 15,
+        contentRange: 'bytes 0-14/15',
+      });
+
+      const res = await request(app.getHttpServer())
+        .get(`/videos/${videoId}/stream`)
+        .set('Range', 'bytes=0-14')
+        .expect(206);
+
+      expect(res.headers['content-range']).toBe('bytes 0-14/15');
       expect(res.headers['accept-ranges']).toBe('bytes');
       expect(res.headers['content-type']).toContain('video/mp4');
     });
