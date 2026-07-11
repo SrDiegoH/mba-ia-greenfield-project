@@ -149,6 +149,64 @@ NestJS with standard module structure. Source lives in `src/`, compiled output i
 - Each domain feature gets its own module (e.g., `UsersModule`, `VideosModule`) registered in `AppModule`
 - Controllers handle HTTP routing; Services hold business logic; both are scoped to their module
 
+## Phase 03 — Video Module
+
+### Services in `compose.yaml`
+
+| Service | Role | Ports |
+|---------|------|-------|
+| `redis` | BullMQ queue backend | 6379 |
+| `minio` | S3-compatible object storage (MinIO) | 9000 (API), 9001 (console) |
+| `video-worker` | NestJS standalone BullMQ processor (FFmpeg) | — |
+
+The `video-worker` service is built from `Dockerfile.worker` (same project directory). It runs `dist/worker.js` — a NestJS standalone context (`NestFactory.createApplicationContext`) with no HTTP server.
+
+### Modules
+
+| Module | Location | Key exports |
+|--------|----------|-------------|
+| `StorageModule` (global) | `src/storage/` | `StorageService` — pre-signed URLs, object get/put/delete |
+| `VideosModule` | `src/videos/` | `VideosController`, `VideosService` |
+| `VideoProcessingModule` | `src/video-processing/` | `VideoProcessingProcessor` — **only imported in `src/worker.ts`, not in `AppModule`** |
+
+### Config namespaces
+
+| File | `registerAs` key | Env vars |
+|------|-----------------|----------|
+| `src/config/storage.config.ts` | `'storage'` | `STORAGE_ENDPOINT`, `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY`, `STORAGE_BUCKET` |
+| `src/config/queue.config.ts` | `'queue'` | `REDIS_HOST` (default `redis`), `REDIS_PORT` (default `6379`), `REDIS_PASSWORD` (optional) |
+
+### Video Endpoints
+
+| Method | Path | Auth | Status codes |
+|--------|------|------|-------------|
+| `POST` | `/videos` | JWT | 201, 400, 401, 403 |
+| `POST` | `/videos/:id/upload-complete` | JWT (owner) | 200, 400, 401, 403, 404 |
+| `GET` | `/videos/:id` | Public | 200, 404 |
+| `GET` | `/videos/:id/stream` | Public | 200, 206, 404, 409, 416 |
+| `GET` | `/videos/:id/download` | JWT | 200, 401, 404, 409 |
+| `GET` | `/channels/:channelId/videos` | JWT (owner) | 200, 401, 403, 404 |
+| `PATCH` | `/videos/:id` | JWT (owner) | 200, 400, 401, 403, 404 |
+| `DELETE` | `/videos/:id` | JWT (owner) | 204, 401, 403, 404 |
+
+### Running the worker locally
+
+```bash
+# The worker starts automatically as part of docker compose up -d
+docker compose up -d
+
+# Check worker logs
+docker compose logs video-worker -f
+
+# Rebuild worker image after code changes
+docker compose build video-worker && docker compose up -d video-worker
+```
+
+### Storage key conventions
+
+- Video file: `videos/{uuid}/original.{ext}` (ext derived from `mime_type`, e.g., `video/mp4` → `mp4`)
+- Thumbnail: `videos/{uuid}/thumbnail.jpg`
+
 ## Code Conventions
 
 - **TypeScript:** `nodenext` module resolution, `ES2023` target, `strictNullChecks` on, `noImplicitAny` off
