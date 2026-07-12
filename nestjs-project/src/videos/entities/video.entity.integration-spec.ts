@@ -1,19 +1,16 @@
 import { DataSource, Repository } from 'typeorm';
 import { RefreshToken } from '../../auth/entities/refresh-token.entity';
 import { VerificationToken } from '../../auth/entities/verification-token.entity';
-import { createTestDataSource } from '../../test/create-test-data-source';
+import {
+  cleanAllTables,
+  createTestDataSource,
+} from '../../test/create-test-data-source';
 import { User } from '../../users/entities/user.entity';
 import { Channel } from '../../channels/entities/channel.entity';
 import { Video } from './video.entity';
 import { VideoStatus } from '../videos.constants';
 
 const ALL_ENTITIES = [User, Channel, RefreshToken, VerificationToken, Video];
-
-async function cleanTables(ds: DataSource): Promise<void> {
-  await ds.query('DELETE FROM "videos"');
-  await ds.query('DELETE FROM "channels"');
-  await ds.query('DELETE FROM "users"');
-}
 
 describe('Video entity (integration)', () => {
   let dataSource: DataSource;
@@ -35,7 +32,7 @@ describe('Video entity (integration)', () => {
   });
 
   beforeEach(async () => {
-    await cleanTables(dataSource);
+    await cleanAllTables(dataSource);
     const user = await userRepo.save(
       userRepo.create({
         email: `entity_test_${Date.now()}@test.com`,
