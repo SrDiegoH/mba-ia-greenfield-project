@@ -42,11 +42,11 @@ O projeto é um monorepo baseado em containers Docker. Cada subprojeto sobe sua 
 
 - **Frontend** (Next.js 16, App Router + React Server Components) — interface da plataforma. Segue o **modelo BFF**: o navegador nunca chama a API NestJS diretamente; todo tráfego passa por Route Handlers same-origin em `app/api/**`, que fazem proxy server-side para a API.
 - **API** (NestJS 11) — regras de negócio, autenticação (JWT + refresh token rotation), envio de e-mails e acesso ao banco.
-- **Database** (PostgreSQL 17) — usuários, canais e tokens de autenticação.
+- **Database** (PostgreSQL 17) — usuários, canais, tokens de autenticação e metadados de vídeos.
 - **Email Service** (Mailpit) — captura os e-mails transacionais (confirmação de conta e recuperação de senha) em uma UI local.
-- **Video Worker** (FFmpeg) — processamento de vídeos *(planejado — Fase 03)*.
-- **Object Storage** (S3/MinIO) — arquivos de vídeo e thumbnails *(planejado — Fase 03)*.
-- **Message Queue** — fila de processamento de vídeos *(planejado — Fase 03)*.
+- **Video Worker** (FFmpeg) — consumidor BullMQ standalone que processa os vídeos enviados (thumbnail, duração, metadados).
+- **Object Storage** (S3/MinIO) — arquivos de vídeo originais e thumbnails.
+- **Message Queue** (BullMQ + Redis) — fila de jobs de processamento de vídeo.
 
 O diagrama de arquitetura completo (C4) está em `docs/diagrams/software-arch.mermaid`.
 
@@ -54,12 +54,12 @@ O diagrama de arquitetura completo (C4) está em `docs/diagrams/software-arch.me
 
 Os dois subprojetos têm stacks Docker **separadas**. Suba primeiro o backend, rode as migrations e depois o frontend.
 
-### 1. Backend (NestJS + PostgreSQL + Mailpit)
+### 1. Backend (NestJS + PostgreSQL + Mailpit + Redis + MinIO + Video Worker)
 
 ```bash
 cd nestjs-project
 
-# Sobe API, banco e Mailpit
+# Sobe API, banco, Mailpit, Redis, MinIO e o video-worker
 docker compose up -d
 
 # Instala dependências (apenas na primeira vez)
@@ -79,7 +79,30 @@ Serviços disponíveis:
 | API NestJS | http://localhost:3000 |
 | PostgreSQL | `localhost:5432` (db/user/senha: `streamtube`) |
 | Mailpit (UI de e-mails) | http://localhost:8025 |
-| Swagger (opcional) | http://localhost:3000/api/docs — habilite com `SWAGGER_ENABLED=true` |
+| Redis (fila BullMQ) | `localhost:6379` |
+| MinIO (API S3) | http://localhost:9000 |
+| MinIO (console web) | http://localhost:9001 (usuário/senha: `streamtube`) |
+| Swagger | http://localhost:3000/api/docs — habilite com `SWAGGER_ENABLED=true` |
+
+O bucket do MinIO é criado automaticamente pela própria API no boot — nenhuma ação manual necessária.
+
+#### ⚠️ Configuração necessária: resolver o hostname `minio` no host
+
+A API gera **URLs pré-assinadas de upload** (`PUT` direto no MinIO) apontando para `http://minio:9000` — esse é o nome do serviço Docker, que só é resolvido *dentro* da rede do Compose. Para completar o upload de um vídeo a partir do seu navegador ou de um `curl` rodando no Windows (fora do container), esse hostname precisa resolver para `127.0.0.1`.
+
+Adicione a seguinte linha ao arquivo hosts do Windows (`C:\Windows\System32\drivers\etc\hosts`) — requer um editor aberto **como Administrador** (Notepad ou PowerShell):
+
+```
+127.0.0.1 minio
+```
+
+Via PowerShell como Administrador:
+
+```powershell
+Add-Content -Path "C:\Windows\System32\drivers\etc\hosts" -Value "127.0.0.1 minio"
+```
+
+Sem esse ajuste, o `POST /videos` funciona normalmente (cria o registro e retorna a URL pré-assinada), mas o `PUT` do arquivo na URL retornada falha por não resolver o hostname `minio`.
 
 ### 2. Frontend (Next.js)
 
@@ -150,6 +173,65 @@ Telas e Route Handlers BFF (`next-frontend`):
 
 Segurança: senhas com **Argon2**, **JWT** com `JwtAuthGuard` global (opt-out via `@Public()`), **rotação de refresh token** com detecção de reuso, **rate limiting** (`ThrottlerGuard`) nos endpoints de auth, e sessão no navegador via **iron-session** (cookies HTTP-only).
 
+### Upload e processamento de vídeos (Fase 03 — backend)
+
+Pipeline completo de upload direto ao Object Storage (padrão pre-signed URL) e processamento assíncrono via fila. **Ainda não há tela no frontend para este fluxo** — teste via Swagger UI (`http://localhost:3000/api/docs`) seguindo o passo a passo abaixo.
+
+Endpoints da API (`nestjs-project`):
+
+| Método & Rota | Auth | Descrição |
+|---------------|------|-----------|
+| `POST /videos` | JWT | Cria um vídeo em rascunho e retorna a URL pré-assinada de upload |
+| `POST /videos/:id/upload-complete` | JWT (dono) | Confirma o upload e enfileira o processamento (FFmpeg) |
+| `GET /videos/:id` | Público | Consulta metadados e status do vídeo |
+| `GET /videos/:id/stream` | Público | Stream com suporte a range requests (`206`) |
+| `GET /videos/:id/download` | JWT | Download do arquivo completo (`Content-Disposition: attachment`) |
+| `GET /channels/:channelId/videos` | JWT (dono) | Lista vídeos do canal (paginado) |
+| `PATCH /videos/:id` | JWT (dono) | Atualiza o título |
+| `DELETE /videos/:id` | JWT (dono) | Remove o vídeo (registro + arquivos no storage) |
+
+Ciclo de vida do vídeo: `draft` → `processing` → `ready` (ou `error`, se o processamento falhar).
+
+#### Passo a passo — testando o upload pelo Swagger
+
+Pré-requisito: a entrada `127.0.0.1 minio` já aplicada no arquivo hosts (seção acima).
+
+1. **Login e autorização** — `POST /auth/login` com um usuário já confirmado → copie o `access_token` da resposta → clique em **Authorize** (cadeado no topo do Swagger UI), cole o token (sem o prefixo `Bearer`) e confirme.
+
+2. **Iniciar o upload** — `POST /videos` → "Try it out" → envie:
+   ```json
+   {
+     "title": "Meu primeiro vídeo",
+     "file_size": 1048576,
+     "mime_type": "video/mp4"
+   }
+   ```
+   `file_size` deve ser o tamanho real (em bytes) do arquivo a enviar. A resposta traz `id` (uuid do vídeo), `status: "draft"` e `upload_url` (URL pré-assinada).
+
+3. **Enviar o arquivo** — o Swagger não tem campo para `PUT` bruto; use `curl` no terminal (Windows, fora do container):
+   ```bash
+   curl -X PUT "URL_COPIADA_DO_PASSO_2" \
+     -H "Content-Type: video/mp4" \
+     --upload-file "caminho/do/seu/video.mp4"
+   ```
+   Deve responder `200 OK` sem corpo.
+
+4. **Confirmar o upload** — `POST /videos/{id}/upload-complete` com o `id` do passo 2 → muda o status para `processing` e enfileira o job no `video-worker`.
+
+5. **Acompanhar o processamento** — `GET /videos/{id}` (público) repetidamente até `status` virar `ready` (ou `error`). Para ver o FFmpeg rodando em tempo real:
+   ```bash
+   cd nestjs-project
+   docker compose logs video-worker -f
+   ```
+
+6. **Baixar o vídeo** — com o `access_token` autorizado no Swagger, abra `GET /videos/{id}/download` → "Try it out" → Execute → use o link **"Download file"** na resposta. Alternativa via `curl`:
+   ```bash
+   curl -H "Authorization: Bearer SEU_ACCESS_TOKEN" \
+     "http://localhost:3000/videos/SEU_VIDEO_ID/download" \
+     -o video-baixado.mp4
+   ```
+   Retorna `409` se o vídeo ainda não estiver `ready`.
+
 ## 🛠️ Estrutura do Projeto
 
 ```
@@ -167,13 +249,17 @@ green-field-ia-project/
 │   │   ├── auth/                        # Cadastro, login, JWT, refresh, reset de senha
 │   │   ├── users/                       # Entidade e serviço de usuários
 │   │   ├── channels/                    # Canal 1:1 por usuário (nickname do e-mail)
+│   │   ├── videos/                      # Upload, metadados e endpoints REST de vídeo
+│   │   ├── video-processing/            # Processor BullMQ (FFmpeg) — só no worker standalone
+│   │   ├── storage/                     # Cliente S3/MinIO, URLs pré-assinadas
 │   │   ├── mail/                        # Envio de e-mails (templates Handlebars)
 │   │   ├── common/                      # Filtros, pipes e exceptions de domínio
 │   │   ├── config/                      # Configs namespaced (Joi)
 │   │   └── database/                    # data-source, migrations e seeds
 │   ├── test/                            # Testes e2e
-│   ├── compose.yaml                     # Docker Compose (API + PostgreSQL + Mailpit)
-│   └── Dockerfile.dev
+│   ├── compose.yaml                     # Docker Compose (API + PostgreSQL + Mailpit + Redis + MinIO + worker)
+│   ├── Dockerfile.dev
+│   └── Dockerfile.worker                # Imagem do video-worker (BullMQ standalone)
 ├── next-frontend/                       # Frontend (Next.js 16, App Router)
 │   ├── app/                             # Rotas, layouts, páginas e Route Handlers BFF
 │   ├── components/                      # Componentes de auth, UI (shadcn) e ícones
@@ -194,7 +280,7 @@ green-field-ia-project/
 |------|-----------|--------|
 | **01** | Configuração Base do Projeto | ✅ Concluída |
 | **02** | Cadastro, Login e Gerenciamento de Conta | ✅ Concluída |
-| **03** | Upload e Processamento de Vídeos | ⏳ Planejada |
+| **03** | Upload e Processamento de Vídeos | ✅ Concluída (backend) — frontend pendente |
 | **04** | Gerenciamento de Vídeos e Canal | ⏳ Planejada |
 | **05** | Página de Visualização do Vídeo | ⏳ Planejada |
 | **06** | Interações Sociais (Likes, Comentários, Inscrições) | ⏳ Planejada |
@@ -208,7 +294,9 @@ Detalhes completos em `docs/project-plan.md`.
 |--------|------------|
 | Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4, shadcn/ui, React Hook Form + Zod, iron-session, openapi-fetch |
 | Backend | NestJS 11, TypeScript, TypeORM, JWT, Argon2, Mailer (Handlebars) |
+| Vídeo | BullMQ + Redis (fila), FFmpeg (processamento), AWS SDK S3 (client MinIO) |
 | Banco de Dados | PostgreSQL 17 |
+| Object Storage (dev) | MinIO |
 | E-mail (dev) | Mailpit |
 | Containerização | Docker, Docker Compose |
 | Testes | Jest, Supertest (backend); Vitest, MSW, Playwright (frontend) |

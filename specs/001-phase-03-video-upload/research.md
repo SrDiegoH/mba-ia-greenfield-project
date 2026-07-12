@@ -29,6 +29,7 @@ Resolve todas as decisões técnicas marcadas como abertas no spec. Cada seção
 - Intervalo fixo entre tentativas: **5 segundos** (`backoff: { type: 'fixed', delay: 5000 }`)
 - Máximo de tentativas: **3** (`attempts: 3`)
 - Concorrência do worker: **2** (2 vídeos processados em paralelo por instância do worker)
+- Lock timeout do job: **300.000 ms (5 minutos)** (`lockDuration: 300_000` nas WorkerOptions) — o TTL padrão do BullMQ é 30 segundos; para vídeos de até 10 GB o FFmpeg pode levar vários minutos, tornando o padrão insuficiente e causando jobs "orphaned" (perdidos sem unlock). O worker deve configurar `@Processor(VIDEO_QUEUE_NAME, { lockDuration: 300_000 })` e o BullMQ renovará automaticamente o lock enquanto o job estiver em execução.
 
 ---
 

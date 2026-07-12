@@ -48,3 +48,55 @@ export class TokenReuseDetectedException extends DomainException {
     );
   }
 }
+
+export class VideoNotFoundException extends DomainException {
+  constructor(id: string) {
+    super('VIDEO_NOT_FOUND', 404, `Video ${id} not found`);
+  }
+}
+
+export class VideoNotReadyException extends DomainException {
+  constructor() {
+    super('VIDEO_NOT_READY', 409, 'Video is not ready for streaming');
+  }
+}
+
+export class VideoNotDraftException extends DomainException {
+  constructor() {
+    super('INVALID_VIDEO_STATUS', 400, 'Video is not in draft status');
+  }
+}
+
+export class VideoOwnershipException extends DomainException {
+  constructor() {
+    super('VIDEO_OWNERSHIP', 403, 'You do not own this video');
+  }
+}
+
+export class ChannelRequiredException extends DomainException {
+  constructor() {
+    super('CHANNEL_REQUIRED', 403, 'You must have a channel to upload videos');
+  }
+}
+
+export class ChannelNotFoundException extends DomainException {
+  constructor(id: string) {
+    super('CHANNEL_NOT_FOUND', 404, `Channel ${id} not found`);
+  }
+}
+
+export class VideoUploadEnqueueException extends DomainException {
+  constructor() {
+    super(
+      'UPLOAD_ENQUEUE_FAILED',
+      500,
+      'Failed to enqueue video processing job',
+    );
+  }
+}
+
+export class VideoRangeNotSatisfiableException extends DomainException {
+  constructor() {
+    super('VIDEO_RANGE_NOT_SATISFIABLE', 416, 'Range not satisfiable');
+  }
+}

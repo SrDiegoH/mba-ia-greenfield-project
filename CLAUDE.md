@@ -30,7 +30,7 @@ See `docs/diagrams/software-arch.mermaid` for the full diagram. Key containers:
 - **Video Worker** (FFmpeg) → consumes jobs from queue, processes videos, updates DB and storage
 - **Database** (PostgreSQL) → users, channels, videos, comments, likes
 - **Object Storage** (S3/MinIO) → video files and thumbnails
-- **Message Queue** (TBD) → video processing job queue
+- **Message Queue** (BullMQ + Redis) → video processing job queue
 - **Email Service** (SMTP) → account confirmation and password recovery
 
 ## Docker Networking
@@ -113,6 +113,60 @@ Skip documentation lookup only for trivial operations such as:
 
 If a library is involved and there is uncertainty, documentation lookup is mandatory.
 If the documentation returned does not match the installed version, flag the discrepancy before proceeding.
+
+## Phase 03 — Video Module (Completed)
+
+Phase 03 adds the video upload and processing pipeline to `nestjs-project/`. All infrastructure and module code is in place.
+
+### New Infrastructure Services (`nestjs-project/compose.yaml`)
+
+| Service | Image | Ports | Role |
+|---------|-------|-------|------|
+| `redis` | `redis:7-alpine` | 6379 | BullMQ queue backend |
+| `minio` | `minio/minio` | 9000 (API), 9001 (UI) | S3-compatible object storage |
+| `video-worker` | `Dockerfile.worker` | — | NestJS standalone BullMQ consumer; runs FFmpeg |
+
+### New Backend Modules
+
+| Module | Path | Responsibility |
+|--------|------|----------------|
+| `StorageModule` | `src/storage/` | S3 client (MinIO), presigned URLs, object CRUD |
+| `VideosModule` | `src/videos/` | Video entity, REST endpoints, business logic |
+| `VideoProcessingModule` | `src/video-processing/` | BullMQ processor (FFmpeg); **not imported in AppModule — only in `src/worker.ts`** |
+
+### Video Endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `POST` | `/videos` | JWT | Initiate upload — creates draft, returns pre-signed PUT URL |
+| `POST` | `/videos/:id/upload-complete` | JWT (owner) | Confirm upload — enqueues processing job |
+| `GET` | `/videos/:id` | Public | Get video metadata |
+| `GET` | `/videos/:id/stream` | Public | Stream video with range request support (206) |
+| `GET` | `/videos/:id/download` | JWT | Download full video (Content-Disposition: attachment) |
+| `GET` | `/channels/:channelId/videos` | JWT (owner) | List channel videos (paginated, newest first) |
+| `PATCH` | `/videos/:id` | JWT (owner) | Update video title |
+| `DELETE` | `/videos/:id` | JWT (owner) | Delete video + storage files + cancel pending job |
+
+### Video Status Lifecycle
+
+```
+draft  →  processing  →  ready
+                     ↘  error
+```
+
+- `draft`: record created; pre-signed URL returned to client for direct PUT to MinIO.
+- `processing`: `upload-complete` called; BullMQ job enqueued (3 attempts, 5 s fixed backoff).
+- `ready`: FFmpeg succeeded; `thumbnail_key`, `duration_seconds`, `processing_metadata` populated.
+- `error`: all retries exhausted; `error_cause` set (max 2048 chars).
+
+### Planning Artifacts (Phase 03)
+
+- Technical decisions: `docs/decisions/technical-decisions-phase-03-videos.md`
+- Phase context: `docs/phases/phase-03-videos/context.md`
+- Validation (clean): `docs/phases/phase-03-videos/validation.md`
+- Library refs: `docs/phases/phase-03-videos/library-refs.md`
+- Implementation plan (SI-03.x): `docs/phases/phase-03-videos/phase-03-videos.md`
+- Progress: `docs/phases/phase-03-videos/progress.md`
 
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
